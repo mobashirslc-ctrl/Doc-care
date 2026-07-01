@@ -1,4 +1,6 @@
 import { useState, useRef } from "react";
+import { RegisterPage } from "./components/RegisterPage";
+import { LoginPage } from "./components/LoginPage";
 import {
   User, Lock, Mail, Phone, Upload, QrCode, Activity,
   Users, FileText, Settings, Bell, Star, Play, Download,
@@ -1896,8 +1898,8 @@ export default function App() {
   const setAuth = (u: { name: string; role: Role } | null) => setAuthUser(u);
 
   if (view === "landing") return <LandingPage go={go}/>;
-  if (view === "login") return <LoginPage go={go} setAuth={setAuth}/>;
-  if (view === "register") return <RegisterPage go={go} setDocPackage={setDocPackage}/>;
+if (view === "login") return <LoginPage go={go} setAuth={setAuth} />;
+if (view === "register") return <RegisterPage go={go} setDocPackage={setDocPackage}/>;
   if (view === "doctor-payment") return <DoctorPaymentPage go={go} docPackage={docPackage}/>;
   if (view === "doctor-pending") return <DoctorPendingPage go={go} docPackage={docPackage}/>;
   if (view === "pending") return <PendingApprovalPage go={go}/>;
