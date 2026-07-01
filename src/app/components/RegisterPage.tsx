@@ -46,12 +46,12 @@ export function RegisterPage({ go, setDocPackage }: { go: (v: any) => void; setD
 
         {/* Input Fields */}
         <div className="space-y-4">
-          <input className="w-full p-3 border rounded-xl" placeholder="পূর্ণ নাম" onChange={(e) => upd("name", e.target.value)} />
-          <input className="w-full p-3 border rounded-xl" placeholder="ইমেইল" onChange={(e) => upd("email", e.target.value)} />
-          <input className="w-full p-3 border rounded-xl" placeholder="মোবাইল নম্বর" onChange={(e) => upd("phone", e.target.value)} />
-          <input type="password" className="w-full p-3 border rounded-xl" placeholder="পাসওয়ার্ড" onChange={(e) => upd("password", e.target.value)} />
-          <input type="password" className="w-full p-3 border rounded-xl" placeholder="পাসওয়ার্ড নিশ্চিত করুন" onChange={(e) => upd("confirmPass", e.target.value)} />
-        </div>
+  <input className="w-full p-3 border rounded-xl" placeholder="পূর্ণ নাম" value={form.name} onChange={(e) => upd("name", e.target.value)} />
+  <input className="w-full p-3 border rounded-xl" placeholder="ইমেইল" value={form.email} onChange={(e) => upd("email", e.target.value)} />
+  <input className="w-full p-3 border rounded-xl" placeholder="মোবাইল নম্বর" value={form.phone} onChange={(e) => upd("phone", e.target.value)} />
+  <input type="password" className="w-full p-3 border rounded-xl" placeholder="পাসওয়ার্ড" value={form.password} onChange={(e) => upd("password", e.target.value)} />
+  {/* confirmPass এখানে প্রয়োজন নেই যদি না আপনি এটি ভেরিফাই করেন */}
+</div>
 
         <button 
           onClick={handleFinalSubmit}
