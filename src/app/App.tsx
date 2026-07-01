@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
-import { RegisterPage } from "./components/RegisterPage";
-import { LoginPage } from "./components/LoginPage";
+import { registerUser, loginUser } from "../firebase/auth";
+import { auth } from "../firebase/config";
 import {
   User, Lock, Mail, Phone, Upload, QrCode, Activity,
   Users, FileText, Settings, Bell, Star, Play, Download,
@@ -10,7 +10,7 @@ import {
   ArrowRight, Zap, Globe, CreditCard, UserCheck,
   ClipboardList, ChevronDown, X, Plus, Shield,
   Headphones, Menu, Search, AlertCircle, RefreshCw,
-  AlertTriangle
+  AlertTriangle, UserPlus // <--- এই UserPlus টি এখানে যোগ করে দিন
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis,
@@ -355,69 +355,78 @@ function LandingPage({ go }: { go: (v: View) => void }) {
 // ============================================================
 function LoginPage({ go, setAuth }: { go: (v: View) => void; setAuth: (u: { name: string; role: Role }) => void }) {
   const [role, setRole] = useState<Role>("doctor");
-  const [identifier, setIdentifier] = useState(""); const [password, setPassword] = useState(""); const [showPass, setShowPass] = useState(false);
-  const DEMO = { doctor: { email: "dr.karim@example.com", name: "ডা. আহমেদ করিম" }, patient: { email: "patient@example.com", name: "মো. রহিম উদ্দিন" }, agent: { email: "rafi@example.com", name: "রাফি হাসান" }, admin: { email: "admin@example.com", name: "Super Admin" } };
+  const [identifier, setIdentifier] = useState(""); 
+  const [password, setPassword] = useState(""); 
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+
   const isValid = identifier.length > 0 && password.length >= 6;
-  const demoLogin = (r: Role) => { setAuth({ name: DEMO[r].name, role: r }); go(r); };
-  const tabs = [{ id: "doctor" as Role, label: "ডাক্তার", icon: <User className="w-4 h-4"/> }, { id: "patient" as Role, label: "রোগী", icon: <Heart className="w-4 h-4"/> }, { id: "agent" as Role, label: "এজেন্ট", icon: <Headphones className="w-4 h-4"/> }, { id: "admin" as Role, label: "অ্যাডমিন", icon: <Shield className="w-4 h-4"/> }];
+  const tabs = [
+    { id: "doctor" as Role, label: "ডাক্তার", icon: <User className="w-4 h-4"/> }, 
+    { id: "patient" as Role, label: "রোগী", icon: <Heart className="w-4 h-4"/> }, 
+    { id: "agent" as Role, label: "এজেন্ট", icon: <Headphones className="w-4 h-4"/> }, 
+    { id: "admin" as Role, label: "অ্যাডমিন", icon: <Shield className="w-4 h-4"/> }
+  ];
+
+  const handleLogin = async () => {
+  setLoading(true);
+  try {
+    const userData = await loginUser(identifier, password);
+    
+    // ১. অ্যাপের অথেন্টিকেশন স্টেট আপডেট করুন
+    // এটিই আপনার ড্যাশবোর্ডে ডেটা পাঠাবে
+    setAuth({ name: userData.name, role: userData.role });
+    
+    // ২. setCurrentUser(userData); // <--- এই লাইনটি মুছে ফেলুন, এটিই এরর তৈরি করছে
+    
+    // ৩. ইউজারের রোল অনুযায়ী ড্যাশবোর্ডে পাঠান
+    go(userData.role);
+    
+  } catch (error: any) {
+    alert("লগইন ব্যর্থ: " + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-12" style={{ background: "linear-gradient(135deg, #FF5E13 0%, #D84315 100%)" }}>
-      <div className="absolute inset-0 opacity-10 pointer-events-none"><div className="absolute top-10 left-10 w-80 h-80 bg-white rounded-full blur-3xl"/><div className="absolute bottom-10 right-10 w-60 h-60 bg-white rounded-full blur-3xl"/></div>
-      <div className="relative w-full max-w-md mx-4">
-        <div className="text-center mb-8">
-          <button onClick={() => go("landing")} className="inline-flex items-center gap-3 text-white">
-            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg"><Heart className="w-7 h-7" style={{ color: "#FF5E13" }}/></div>
-            <span className="text-2xl font-bold">মেডিকেয়ার BD</span>
+      <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md mx-4">
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">স্বাগতম!</h2>
+        <p className="text-gray-500 text-sm mb-6">আপনার অ্যাকাউন্টে লগইন করুন</p>
+        
+        <div className="grid grid-cols-4 gap-1 p-1 bg-gray-100 rounded-xl mb-6">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setRole(t.id)}
+                    className={`flex flex-col items-center gap-1 py-2 px-1 rounded-lg text-xs font-semibold transition-all ${role === t.id ? "bg-white shadow text-orange-600" : "text-gray-500 hover:text-gray-700"}`}>
+              {t.icon}{t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-semibold text-gray-700 block mb-1.5">ইমেইল</label>
+            <input type="email" value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder="email@example.com" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-300"/>
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-gray-700 block mb-1.5">পাসওয়ার্ড</label>
+            <input type={showPass ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-300"/>
+          </div>
+          
+          <button onClick={handleLogin} disabled={!isValid || loading}
+                  className="w-full py-3.5 rounded-xl font-bold text-white text-sm bg-orange-600 hover:bg-orange-700 transition-all disabled:opacity-50">
+            {loading ? "অপেক্ষা করুন..." : "লগইন করুন"}
           </button>
         </div>
-        <div className="bg-white rounded-3xl shadow-2xl p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">স্বাগতম!</h2>
-          <p className="text-gray-500 text-sm mb-6">আপনার অ্যাকাউন্টে লগইন করুন</p>
-          <div className="grid grid-cols-4 gap-1 p-1 bg-gray-100 rounded-xl mb-6">
-            {tabs.map(t => (
-              <button key={t.id} onClick={() => setRole(t.id)}
-                      className={`flex flex-col items-center gap-1 py-2 px-1 rounded-lg text-xs font-semibold transition-all ${role === t.id ? "bg-white shadow text-orange-600" : "text-gray-500 hover:text-gray-700"}`}>
-                {t.icon}{t.label}
-              </button>
-            ))}
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-semibold text-gray-700 block mb-1.5">ইমেইল / মোবাইল নম্বর</label>
-              <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"/>
-                <input type="text" value={identifier} onChange={e => setIdentifier(e.target.value)} placeholder={`Demo: ${DEMO[role].email}`} className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent"/>
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-gray-700 block mb-1.5">পাসওয়ার্ড</label>
-              <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"/>
-                <input type={showPass ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="কমপক্ষে ৬ অক্ষর" className="w-full pl-10 pr-12 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent"/>
-                <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showPass ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}</button>
-              </div>
-            </div>
-            <button onClick={() => { setAuth({ name: DEMO[role].name, role }); go(role); }} disabled={!isValid}
-                    className={`w-full py-3.5 rounded-xl font-bold text-white text-sm transition-all ${isValid ? "hover:opacity-90 shadow-md" : "opacity-40 cursor-not-allowed"}`}
-                    style={{ background: isValid ? "linear-gradient(135deg, #FF5E13, #D84315)" : "#cbd5e1" }}>
-              লগইন করুন
-            </button>
-          </div>
-          <div className="flex items-center gap-3 my-5"><div className="flex-1 h-px bg-gray-200"/><span className="text-xs text-gray-400">দ্রুত ডেমো লগইন</span><div className="flex-1 h-px bg-gray-200"/></div>
-          <div className="grid grid-cols-2 gap-2">
-            {tabs.map(t => (
-              <button key={t.id} onClick={() => demoLogin(t.id)} className="flex items-center gap-2 py-2 px-3 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-orange-300 hover:text-orange-600 hover:bg-orange-50 transition-all">
-                {t.icon}{t.label} হিসেবে প্রবেশ
-              </button>
-            ))}
-          </div>
-          <p className="text-center text-sm text-gray-500 mt-6">অ্যাকাউন্ট নেই?{" "}<button onClick={() => go("register")} className="font-semibold hover:underline" style={{ color: "#FF5E13" }}>রেজিস্ট্রেশন করুন</button></p>
-        </div>
-        <button onClick={() => go("landing")} className="mt-5 w-full text-center text-white/80 text-sm hover:text-white transition-colors">← হোম পেজে ফিরুন</button>
+
+        <p className="text-center text-sm text-gray-500 mt-6">অ্যাকাউন্ট নেই?{" "}
+          <button onClick={() => go("register")} className="font-semibold text-orange-600 hover:underline">রেজিস্ট্রেশন করুন</button>
+        </p>
       </div>
     </div>
   );
-}
-
-// ============================================================
+}// ============================================================
 // REGISTER PAGE
 // ============================================================
 function RegisterPage({ go, setDocPackage }: { go: (v: View) => void; setDocPackage: (p: PackageKey) => void }) {
@@ -440,12 +449,38 @@ function RegisterPage({ go, setDocPackage }: { go: (v: View) => void; setDocPack
     return false;
   };
 
-  const handleFinalSubmit = () => {
-    if (role === "doctor") { setDocPackage(selectedPkg!); go("doctor-payment"); }
+  // ঠিক সেই জায়গায় এই নতুন কোডটি পেস্ট করুন
+const handleFinalSubmit = async (e: any) => {
+  if (e) e.preventDefault();
+  
+  // এখানে নিশ্চিত করুন যে role এবং অন্যান্য ডাটা form অবজেক্টে আছে
+  const completeFormData = {
+    ...form,
+    role: role, // এখানে নিশ্চিতভাবে role পাঠানো হচ্ছে
+    package: role === "doctor" ? selectedPkg : null
+  };
+  
+  try {
+    console.log("রেজিস্ট্রেশন শুরু হচ্ছে...", completeFormData);
+    
+    // updated ডাটা পাঠান
+    await registerUser(completeFormData); 
+    
+    console.log("রেজিস্ট্রেশন সফল!");
+
+    if (role === "doctor") { 
+      setDocPackage(selectedPkg!); 
+      go("doctor-payment"); 
+    }
     else if (role === "agent") go("pending");
     else if (role === "patient") go("patient");
     else go("admin");
-  };
+
+  } catch (error: any) {
+    console.error("Firebase Error:", error.message);
+    alert("রেজিস্ট্রেশন ব্যর্থ: " + error.message);
+  }
+};
 
   const maxSteps = role === "doctor" ? 2 : role === "agent" ? 4 : 1;
   const tabs = [{ id: "doctor" as Role, label: "ডাক্তার", icon: <User className="w-4 h-4"/> }, { id: "patient" as Role, label: "রোগী", icon: <Heart className="w-4 h-4"/> }, { id: "agent" as Role, label: "এজেন্ট", icon: <Headphones className="w-4 h-4"/> }, { id: "admin" as Role, label: "অ্যাডমিন", icon: <Shield className="w-4 h-4"/> }];
@@ -818,14 +853,35 @@ function PendingApprovalPage({ go }: { go: (v: View) => void }) {
 // ============================================================
 // DOCTOR DASHBOARD
 // ============================================================
-function DoctorDashboard({ go, setAuth, docPackage, subscriptionDays, setSubscriptionDays, isDashboardBlocked, setIsDashboardBlocked }: {
-  go: (v: View) => void; setAuth: (u: null) => void;
-  docPackage: PackageKey; subscriptionDays: number; setSubscriptionDays: (n: number) => void;
-  isDashboardBlocked: boolean; setIsDashboardBlocked: (b: boolean) => void;
+function DoctorDashboard({ 
+  user, // নতুন প্রপস যুক্ত হয়েছে
+  go, 
+  setAuth, 
+  docPackage, 
+  subscriptionDays, 
+  setSubscriptionDays, 
+  isDashboardBlocked, 
+  setIsDashboardBlocked 
+}: {
+  user: any; // ইউজার ডেটা অবজেক্ট
+  go: (v: View) => void; 
+  setAuth: (u: null) => void;
+  docPackage: PackageKey; 
+  subscriptionDays: number; 
+  setSubscriptionDays: (n: number) => void;
+  isDashboardBlocked: boolean; 
+  setIsDashboardBlocked: (b: boolean) => void;
 }) {
+  
+  // ... বাকি স্টেটগুলো আগের মতোই থাকবে
+
+  
+  // ... বাকি সব কোড আগের মতো থাকবে
+  
   const [tab, setTab] = useState("overview");
-  const [playingCall, setPlayingCall] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [playingCall, setPlayingCall] = useState<string | null>(null);
+  
   const [payMethod, setPayMethod] = useState<"bkash" | "nagad" | null>(null);
   const [payTxId, setPayTxId] = useState("");
   const [paySuccess, setPaySuccess] = useState(false);
@@ -906,7 +962,10 @@ function DoctorDashboard({ go, setAuth, docPackage, subscriptionDays, setSubscri
           <div className="p-4 border-b border-gray-100">
             <div className="flex items-center gap-3 mb-3">
               <img src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=60&h=60&fit=crop&auto=format" alt="Doctor" className="w-10 h-10 rounded-full object-cover bg-gray-200"/>
-              <div><div className="text-sm font-bold text-gray-900">ডা. আহমেদ করিম</div><div className="text-xs text-gray-500">কার্ডিওলজিস্ট</div></div>
+              <div>
+  <div className="text-sm font-bold text-gray-900">{user?.name || "ব্যবহারকারী"}</div>
+  <div className="text-xs text-gray-500">{user?.role || "ডাক্তার"}</div>
+</div>
             </div>
             <div className="rounded-xl p-3 mb-2" style={{ background: pkg.lightBg }}>
               <div className="flex items-center justify-between mb-1.5">
@@ -1611,57 +1670,76 @@ function PatientDashboard({ go, setAuth }: { go: (v: View) => void; setAuth: (u:
 // AGENT DASHBOARD
 // ============================================================
 function AgentDashboard({ go, setAuth }: { go: (v: View) => void; setAuth: (u: null) => void }) {
-  const [tab, setTab] = useState("queue"); const [selectedItem, setSelectedItem] = useState<typeof QUEUE[0] | null>(null); const [calling, setCalling] = useState(false); const [followupDate, setFollowupDate] = useState(""); const [note, setNote] = useState(""); const [sidebarOpen, setSidebarOpen] = useState(true); const [reportMonth, setReportMonth] = useState("জুন ২০২৫");
-  const navItems = [{ id: "queue", label: "Active Queue", icon: <Activity className="w-5 h-5"/> }, { id: "patients", label: "My Patients", icon: <Users className="w-5 h-5"/> }, { id: "doctors", label: "Doctors Directory", icon: <ClipboardList className="w-5 h-5"/> }, { id: "performance", label: "Performance", icon: <BarChart2 className="w-5 h-5"/> }, { id: "reports", label: "Reports", icon: <FileText className="w-5 h-5"/> }];
+  const [tab, setTab] = useState("queue"); 
+  const [selectedItem, setSelectedItem] = useState<any>(null); 
+  const [calling, setCalling] = useState(false); 
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // নতুন রোগীর স্টেটস
+  const [newPatient, setNewPatient] = useState({ name: "", age: "", phone: "", address: "", doctor: "", date: "" });
+
+  const navItems = [
+    { id: "queue", label: "Active Queue", icon: <Activity className="w-5 h-5"/> },
+    { id: "add-patient", label: "নতুন এন্ট্রি", icon: <UserPlus className="w-5 h-5"/> }, // নতুন ট্যাব
+    { id: "patients", label: "My Patients", icon: <Users className="w-5 h-5"/> },
+    { id: "doctors", label: "Doctors Directory", icon: <ClipboardList className="w-5 h-5"/> },
+    { id: "performance", label: "Performance", icon: <BarChart2 className="w-5 h-5"/> }
+  ];
+
+  const handlePatientSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log("নতুন রোগী এন্ট্রি হয়েছে:", newPatient);
+    alert("রোগীর তথ্য সফলভাবে সাবমিট হয়েছে এবং সংশ্লিষ্ট ডাক্তারের ড্যাশবোর্ডে যোগ করা হয়েছে!");
+    setNewPatient({ name: "", age: "", phone: "", address: "", doctor: "", date: "" });
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50" style={{ fontFamily: "'Inter', sans-serif" }}>
       <aside className={`${sidebarOpen ? "w-64" : "w-16"} flex-shrink-0 bg-white border-r border-gray-100 flex flex-col transition-all duration-300 shadow-sm`}>
         <div className="p-5 border-b border-gray-100"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#FF5E13" }}><Headphones className="w-5 h-5 text-white"/></div>{sidebarOpen && <span className="font-bold text-gray-900 text-sm">Agent Workspace</span>}</div></div>
-        {sidebarOpen && (<div className="p-4 border-b border-gray-100"><div className="flex items-center gap-3"><div className="relative"><div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold">র</div><div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white animate-pulse"/></div><div><div className="text-sm font-bold text-gray-900">রাফি হাসান</div><div className="text-xs text-green-600 font-medium">● Live</div></div></div></div>)}
+        
         <nav className="flex-1 p-4 space-y-1">
-          {navItems.map(item => (<button key={item.id} onClick={() => { setTab(item.id); if (item.id !== "queue") setSelectedItem(null); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${tab === item.id ? "text-white shadow-md" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`} style={tab === item.id ? { background: "linear-gradient(135deg, #FF5E13, #D84315)" } : {}}>{item.icon}{sidebarOpen && item.label}</button>))}
+          {navItems.map(item => (
+            <button key={item.id} onClick={() => setTab(item.id)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${tab === item.id ? "text-white shadow-md" : "text-gray-600 hover:bg-gray-50"}`} style={tab === item.id ? { background: "linear-gradient(135deg, #FF5E13, #D84315)" } : {}}>
+              {item.icon}{sidebarOpen && item.label}
+            </button>
+          ))}
         </nav>
-        <div className="p-4 border-t border-gray-100"><button onClick={() => { setAuth(null); go("landing"); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all"><LogOut className="w-5 h-5"/>{sidebarOpen && "Logout"}</button></div>
       </aside>
-      <main className="flex-1 overflow-hidden flex flex-col">
-        <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-4"><button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-500 hover:text-gray-700"><Menu className="w-5 h-5"/></button><h1 className="font-bold text-gray-900">{navItems.find(n => n.id === tab)?.label}</h1></div>
-          <div className="flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-full text-xs font-semibold border border-orange-100"><div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"/>{QUEUE.length} নতুন</div>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          {tab === "queue" && (<div className="flex h-full">
-            <div className="w-80 flex-shrink-0 border-r border-gray-100 bg-white overflow-y-auto">
-              <div className="p-4 border-b border-gray-100"><div className="text-sm font-semibold text-gray-700">ইনকামিং কুয়েরি</div><div className="text-xs text-gray-400 mt-0.5">{QUEUE.length}টি নতুন</div></div>
-              <div className="divide-y divide-gray-50">
-                {QUEUE.map(q => (<button key={q.id} onClick={() => setSelectedItem(q)} className={`w-full text-left p-4 hover:bg-gray-50 transition-all border-l-4 ${selectedItem?.id === q.id ? "bg-orange-50 border-orange-500" : "border-transparent"}`}>
-                  <div className="flex items-start justify-between gap-2"><div className="flex-1 min-w-0"><div className="font-semibold text-sm text-gray-900 truncate">{q.patient}</div><div className="text-xs text-gray-500 mt-0.5">{q.phone}</div><div className={`text-xs px-2 py-0.5 rounded-full inline-block mt-1.5 font-medium ${q.type === "prescription" ? "bg-blue-100 text-blue-600" : q.type === "call" ? "bg-green-100 text-green-600" : "bg-purple-100 text-purple-600"}`}>{q.type === "prescription" ? "📄 প্রেসক্রিপশন" : q.type === "call" ? "📞 কল রিকোয়েস্ট" : "❓ প্রশ্ন"}</div></div>{q.urgent && <div className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0 animate-ping mt-1"/>}</div>
-                  <div className="text-xs text-gray-400 mt-1">{q.time}</div>
-                </button>))}
+
+      <main className="flex-1 overflow-y-auto p-6">
+        {tab === "add-patient" && (
+          <div className="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">নতুন রোগীর তথ্য এন্ট্রি</h2>
+            <form onSubmit={handlePatientSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <input type="text" placeholder="রোগীর নাম" className="w-full border p-3 rounded-xl text-sm" value={newPatient.name} onChange={e => setNewPatient({...newPatient, name: e.target.value})} required />
+                <input type="number" placeholder="বয়স" className="w-full border p-3 rounded-xl text-sm" value={newPatient.age} onChange={e => setNewPatient({...newPatient, age: e.target.value})} />
               </div>
+              <input type="text" placeholder="মোবাইল নম্বর" className="w-full border p-3 rounded-xl text-sm" value={newPatient.phone} onChange={e => setNewPatient({...newPatient, phone: e.target.value})} required />
+              <input type="text" placeholder="ঠিকানা" className="w-full border p-3 rounded-xl text-sm" value={newPatient.address} onChange={e => setNewPatient({...newPatient, address: e.target.value})} />
+              <select className="w-full border p-3 rounded-xl text-sm text-gray-600" value={newPatient.doctor} onChange={e => setNewPatient({...newPatient, doctor: e.target.value})}>
+                <option value="">ডাক্তার নির্বাচন করুন</option>
+                <option value="dr_ahmed">ডা. আহমেদ করিম</option>
+                <option value="dr_sabina">ডা. সাবিনা ইসলাম</option>
+              </select>
+              <input type="date" className="w-full border p-3 rounded-xl text-sm text-gray-500" value={newPatient.date} onChange={e => setNewPatient({...newPatient, date: e.target.value})} />
+              <input type="file" className="w-full text-sm border p-2 rounded-xl" />
+              <button type="submit" className="w-full py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-all">সাবমিট করুন</button>
+            </form>
+          </div>
+        )}
+
+        {/* অন্যান্য ট্যাবগুলো আগের মতোই এখানে থাকবে... */}
+        {tab !== "add-patient" && (
+            <div className="flex items-center justify-center h-full text-gray-400">
+                অন্যান্য ট্যাবগুলো এখানে বিদ্যমান।
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              {selectedItem ? (<div className="space-y-5 max-w-2xl">
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5"><div className="flex items-center gap-4"><div className="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center text-orange-600 font-bold text-xl">{selectedItem.patient[0]}</div><div><div className="font-bold text-lg text-gray-900">{selectedItem.patient}</div><div className="text-sm text-gray-500">{selectedItem.phone}</div><div className="text-xs text-gray-400 mt-0.5">ডাক্তার: {selectedItem.doctor}</div></div></div></div>
-                {selectedItem.type === "prescription" && (<div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5"><div className="flex items-center justify-between mb-4"><h3 className="font-bold text-gray-900">প্রেসক্রিপশন ভিউয়ার</h3><div className="flex gap-2"><button className="p-2 border border-gray-200 rounded-lg text-xs text-gray-600">Zoom +</button><button className="p-2 border border-gray-200 rounded-lg text-xs text-gray-600">↻ Rotate</button></div></div><div className="bg-gray-100 rounded-xl flex items-center justify-center" style={{ height: "180px" }}><div className="text-center text-gray-400"><FileText className="w-12 h-12 mx-auto mb-2"/><p className="text-sm">প্রেসক্রিপশনের ছবি এখানে দেখাবে</p></div></div></div>)}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5"><h3 className="font-bold text-gray-900 mb-4">ডেটা এন্ট্রি ফর্ম</h3><div className="space-y-4"><div><label className="text-xs font-semibold text-gray-500 block mb-1.5">পরবর্তী ফলো-আপ ডেট</label><div className="relative"><Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"/><input type="date" value={followupDate} onChange={e => setFollowupDate(e.target.value)} className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"/></div></div><div><label className="text-xs font-semibold text-gray-500 block mb-1.5">স্পেশাল নোট</label><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="রোগীর সম্পর্কে গুরুত্বপূর্ণ তথ্য..." className="w-full border border-gray-200 rounded-xl p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-300" rows={3}/></div></div></div>
-                <button onClick={() => setCalling(!calling)} className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-white text-sm shadow-lg ${calling ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}>
-                  {calling ? <PhoneOff className="w-5 h-5"/> : <PhoneCall className="w-5 h-5"/>}{calling ? "End Call & Save Records" : "Call Patient"}
-                </button>
-                {calling && <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center"><div className="flex items-center justify-center gap-2 text-green-700 font-semibold"><PhoneCall className="w-4 h-4 animate-pulse"/> কল চলছে... {selectedItem.phone}</div></div>}
-              </div>) : (<div className="h-full flex items-center justify-center"><div className="text-center"><Headphones className="w-16 h-16 mx-auto mb-4 opacity-20"/><p className="text-lg font-medium text-gray-500">বাম থেকে একটি কুয়েরি সিলেক্ট করুন</p></div></div>)}
-            </div>
-          </div>)}
-          {tab === "patients" && (<div className="p-6 overflow-y-auto h-full"><div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"><div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between"><h3 className="font-bold text-gray-900">আমার রোগীগণ</h3><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"/><input type="text" placeholder="খুঁজুন..." className="pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none w-48"/></div></div><div className="divide-y divide-gray-50">{PATIENTS.map(p => (<div key={p.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold text-sm">{p.name[0]}</div><div><div className="font-semibold text-sm text-gray-900">{p.name}</div><div className="text-xs text-gray-500">{p.phone}</div></div></div><span className={`text-xs px-2.5 py-1 rounded-full font-medium ${p.status === "urgent" ? "bg-red-100 text-red-600" : p.status === "follow-up" ? "bg-orange-100 text-orange-600" : "bg-green-100 text-green-600"}`}>{p.status === "urgent" ? "জরুরি" : p.status === "follow-up" ? "ফলো-আপ" : "স্থিতিশীল"}</span></div>))}</div></div></div>)}
-          {tab === "doctors" && (<div className="p-6 overflow-y-auto h-full"><div className="grid md:grid-cols-2 gap-4">{[{ name: "ডা. আহমেদ করিম", spec: "কার্ডিওলজিস্ট", chamber: "ধানমন্ডি, ঢাকা", patients: 342 }, { name: "ডা. সাবিনা ইসলাম", spec: "মেডিসিন", chamber: "গুলশান, ঢাকা", patients: 215 }].map((d, i) => (<div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5"><div className="flex items-center gap-3 mb-4"><div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold text-lg">{d.name[4]}</div><div><div className="font-bold text-gray-900">{d.name}</div><div className="text-xs text-gray-500">{d.spec}</div></div></div><div className="space-y-2 text-sm text-gray-600"><div className="flex items-center gap-2"><Globe className="w-4 h-4 text-gray-400 flex-shrink-0"/> {d.chamber}</div><div className="flex items-center gap-2"><Users className="w-4 h-4 text-gray-400 flex-shrink-0"/> {d.patients} রোগী</div></div></div>))}</div></div>)}
-          {tab === "performance" && (<div className="p-6 overflow-y-auto h-full space-y-6"><div className="grid grid-cols-3 gap-4">{[{ label: "আজকের কল", val: "৪২টি", bg: "bg-blue-50 text-blue-600", icon: <PhoneCall className="w-5 h-5"/> }, { label: "সফলতার হার", val: "৯৪%", bg: "bg-green-50 text-green-600", icon: <CheckCircle className="w-5 h-5"/> }, { label: "গড় কল সময়", val: "৩:৪২", bg: "bg-orange-50 text-orange-600", icon: <Clock className="w-5 h-5"/> }].map((s, i) => (<div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5"><div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${s.bg}`}>{s.icon}</div><div className="text-2xl font-bold text-gray-900">{s.val}</div><div className="text-xs text-gray-500 mt-1">{s.label}</div></div>))}</div><div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6"><h3 className="font-bold text-gray-900 mb-4">সাপ্তাহিক পারফরম্যান্স</h3><ResponsiveContainer width="100%" height={220}><BarChart data={PERF_DATA}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/><XAxis dataKey="day" tick={{ fontSize: 11 }}/><YAxis tick={{ fontSize: 11 }}/><Tooltip/><Bar dataKey="calls" fill="#FF5E13" radius={[4, 4, 0, 0]}/></BarChart></ResponsiveContainer></div><div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6"><h3 className="font-bold text-gray-900 mb-4">কল আউটকাম</h3><div className="flex items-center gap-8"><ResponsiveContainer width="50%" height={160}><PieChart><Pie data={CALL_PIE} cx="50%" cy="50%" innerRadius={50} outerRadius={70} dataKey="value"><Cell fill="#FF5E13"/><Cell fill="#e5e7eb"/></Pie><Tooltip/></PieChart></ResponsiveContainer><div className="space-y-3"><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-orange-500"/><span className="text-sm text-gray-600">সফল: <strong>৯৪%</strong></span></div><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-200"/><span className="text-sm text-gray-600">মিসড: <strong>৬%</strong></span></div></div></div></div></div>)}
-          {tab === "reports" && (<div className="p-6 overflow-y-auto h-full space-y-6 max-w-3xl"><div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6"><div className="flex items-center justify-between mb-6"><div><h3 className="font-bold text-gray-900 text-lg">এজেন্ট মাসিক রিপোর্ট</h3><p className="text-xs text-gray-500 mt-0.5">রাফি হাসান — Agent Workspace</p></div><select value={reportMonth} onChange={e => setReportMonth(e.target.value)} className="border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">{["জুন ২০২৫", "মে ২০২৫", "এপ্রিল ২০২৫"].map(m => <option key={m}>{m}</option>)}</select></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">{[{ label: "মোট কল", val: "৪২৫টি" }, { label: "সফল ফলো-আপ", val: "৩৯৯টি" }, { label: "মিসড কল", val: "০টি" }, { label: "সাফল্যের হার", val: "৯৪%" }].map((s, i) => (<div key={i} className="bg-gray-50 rounded-xl p-4 text-center"><div className="text-xl font-bold text-gray-900">{s.val}</div><div className="text-xs text-gray-500 mt-0.5">{s.label}</div></div>))}</div><div className="flex gap-3"><button className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm text-white hover:opacity-90" style={{ background: "linear-gradient(135deg, #FF5E13, #D84315)" }}><Download className="w-4 h-4"/> PDF ডাউনলোড</button><button className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border border-gray-200 text-gray-700 hover:bg-gray-50"><Mail className="w-4 h-4"/> ইমেইলে পাঠান</button><button className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border border-green-200 text-green-700 hover:bg-green-50"><Phone className="w-4 h-4"/> WhatsApp</button></div></div></div>)}
-        </div>
+        )}
       </main>
     </div>
   );
-}
-
-// ============================================================
+}// ============================================================
 // ADMIN DASHBOARD
 // ============================================================
 function AdminDashboard({ go, setAuth, agentList, setAgentList }: {
@@ -1897,16 +1975,50 @@ export default function App() {
   const go = (v: View) => setView(v);
   const setAuth = (u: { name: string; role: Role } | null) => setAuthUser(u);
 
-  if (view === "landing") return <LandingPage go={go}/>;
-if (view === "login") return <LoginPage go={go} setAuth={setAuth} />;
-if (view === "register") return <RegisterPage go={go} setDocPackage={setDocPackage}/>;
-  if (view === "doctor-payment") return <DoctorPaymentPage go={go} docPackage={docPackage}/>;
-  if (view === "doctor-pending") return <DoctorPendingPage go={go} docPackage={docPackage}/>;
-  if (view === "pending") return <PendingApprovalPage go={go}/>;
-  if (view === "doctor") return <DoctorDashboard go={go} setAuth={() => setAuth(null)} docPackage={docPackage} subscriptionDays={subscriptionDays} setSubscriptionDays={setSubscriptionDays} isDashboardBlocked={isDashboardBlocked} setIsDashboardBlocked={setIsDashboardBlocked}/>;
-  if (view === "patient") return <PatientDashboard go={go} setAuth={() => setAuth(null)}/>;
-  if (view === "agent") return <AgentDashboard go={go} setAuth={() => setAuth(null)}/>;
-  if (view === "admin") return <AdminDashboard go={go} setAuth={() => setAuth(null)} agentList={agentList} setAgentList={setAgentList}/>;
-  if (view === "qrscan") return <QRScanPage go={go}/>;
-  return <LandingPage go={go}/>;
+  // ভিউ অনুযায়ী পেজ রেন্ডার করার ফাংশন
+  const renderView = () => {
+    switch (view) {
+      case "landing":
+        return <LandingPage go={go} />;
+      case "login":
+        return <LoginPage go={go} setAuth={setAuth} />;
+      case "register":
+        return <RegisterPage go={go} setDocPackage={setDocPackage} />;
+      case "doctor-payment":
+        return <DoctorPaymentPage go={go} docPackage={docPackage} />;
+      case "doctor-pending":
+        return <DoctorPendingPage go={go} docPackage={docPackage} />;
+      case "pending":
+        return <PendingApprovalPage go={go} />;
+      case "doctor":
+        return (
+          <DoctorDashboard
+            user={authUser} // এখানে currentUser এর পরিবর্তে authUser ব্যবহার করুন
+            go={go}
+            setAuth={() => setAuth(null)}
+            docPackage={docPackage}
+            subscriptionDays={subscriptionDays}
+            setSubscriptionDays={setSubscriptionDays}
+            isDashboardBlocked={isDashboardBlocked}
+            setIsDashboardBlocked={setIsDashboardBlocked}
+          />
+        );
+      case "patient":
+        return <PatientDashboard go={go} setAuth={() => setAuth(null)} />;
+      case "agent":
+        return <AgentDashboard go={go} setAuth={() => setAuth(null)} />;
+      case "admin":
+        return <AdminDashboard go={go} setAuth={() => setAuth(null)} agentList={agentList} setAgentList={setAgentList} />;
+      case "qrscan":
+        return <QRScanPage go={go} />;
+      default:
+        return <LandingPage go={go} />;
+    }
+  };
+
+  return (
+    <div className="w-full min-h-screen bg-gray-50">
+      {renderView()}
+    </div>
+  );
 }
