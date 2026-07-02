@@ -23,8 +23,6 @@ function AgentDashboard({
   callList = [],
   onAddPatient,
   onCompleteCall
-const { completeCallAndScheduleNext } = useFollowupManager(callList);
-
 }: { 
   go: (v: any) => void; 
   setAuth: (u: null) => void;
@@ -35,6 +33,9 @@ const { completeCallAndScheduleNext } = useFollowupManager(callList);
   onAddPatient?: (p: any) => void;
   onCompleteCall?: (callId: string, note: string, nextFollowupDate?: string) => void;
 }) {
+  // হুকটি এখানে ফাংশনের বডির ভেতরে নিয়ে এসেছি
+  const { completeCallAndScheduleNext } = useFollowupManager(callList);
+
   const [tab, setTab] = useState("queue"); 
   const [selectedItem, setSelectedItem] = useState<any>(null); 
   const [calling, setCalling] = useState(false); 
@@ -43,14 +44,14 @@ const { completeCallAndScheduleNext } = useFollowupManager(callList);
   const [sidebarOpen, setSidebarOpen] = useState(true); 
   const [reportMonth, setReportMonth] = useState("জুন ২০২৫");
 
-  // নতুন রোগীর স্টেটস (হোয়াটসঅ্যাপ/ম্যানুয়াল এন্ট্রি)
+  // নতুন রোগীর স্টেটস
   const [newPatient, setNewPatient] = useState({ name: "", age: "", phone: "", address: "", doctor: "", prescription: "" });
 
   // এজেন্টের নাম ও আইডি নির্ধারণ
   const agentName = currentUser?.name || "রাফি হাসান";
   const agentId = currentUser?.id || "rafi_hasan";
 
-  // ডাইনামিক কিউ বা কল লিস্ট ফিল্টারিং (অ্যাডমিন অ্যাসাইন করা ও নিজস্ব এন্ট্রি করা সব পেন্ডিং কল এখানে আসবে)
+  // ডাইনামিক কিউ বা কল লিস্ট ফিল্টারিং
   const dynamicQueue = (callList || [])
     .filter((c: any) => c.agentId === agentId && c.status === "pending")
     .map((c: any) => {
@@ -67,12 +68,13 @@ const { completeCallAndScheduleNext } = useFollowupManager(callList);
       };
     });
 
-  // যদি বাইরে কোনো গ্লোবাল QUEUE থাকে বা খালি থাকে তার জন্য সেফ ফলব্যাক
   const displayQueue = dynamicQueue.length > 0 ? dynamicQueue : (typeof QUEUE !== "undefined" ? QUEUE : []);
   const displayPatients = (patients && patients.length > 0) ? patients : (typeof PATIENTS !== "undefined" ? PATIENTS : []);
   const displayPerfData = typeof PERF_DATA !== "undefined" ? PERF_DATA : DEFAULT_PERF;
   const displayCallPie = typeof CALL_PIE !== "undefined" ? CALL_PIE : DEFAULT_PIE;
   const doctorList = users?.filter((u: any) => u.role === "doctor") || [];
+
+ 
   
   // ১. নতুন রোগী ম্যানুয়াল এন্ট্রি লজিক (যা সরাসরি পেন্ডিং কল লিস্টে পাঠাবে)
   const handlePatientSubmit = (e: React.FormEvent) => {
