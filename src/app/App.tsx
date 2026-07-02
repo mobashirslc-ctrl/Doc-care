@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 import { registerUser, loginUser } from "../firebase/auth";
 import { auth } from "../firebase/config";
+// src/app/app.tsx
+import AgentDashboard from './components/AgentDashboard';
 import {
   User, Lock, Mail, Phone, Upload, QrCode, Activity,
   Users, FileText, Settings, Bell, Star, Play, Download,
@@ -1667,79 +1669,8 @@ function PatientDashboard({ go, setAuth }: { go: (v: View) => void; setAuth: (u:
 }
 
 // ============================================================
-// AGENT DASHBOARD
+
 // ============================================================
-function AgentDashboard({ go, setAuth }: { go: (v: View) => void; setAuth: (u: null) => void }) {
-  const [tab, setTab] = useState("queue"); 
-  const [selectedItem, setSelectedItem] = useState<any>(null); 
-  const [calling, setCalling] = useState(false); 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  
-  // নতুন রোগীর স্টেটস
-  const [newPatient, setNewPatient] = useState({ name: "", age: "", phone: "", address: "", doctor: "", date: "" });
-
-  const navItems = [
-    { id: "queue", label: "Active Queue", icon: <Activity className="w-5 h-5"/> },
-    { id: "add-patient", label: "নতুন এন্ট্রি", icon: <UserPlus className="w-5 h-5"/> }, // নতুন ট্যাব
-    { id: "patients", label: "My Patients", icon: <Users className="w-5 h-5"/> },
-    { id: "doctors", label: "Doctors Directory", icon: <ClipboardList className="w-5 h-5"/> },
-    { id: "performance", label: "Performance", icon: <BarChart2 className="w-5 h-5"/> }
-  ];
-
-  const handlePatientSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("নতুন রোগী এন্ট্রি হয়েছে:", newPatient);
-    alert("রোগীর তথ্য সফলভাবে সাবমিট হয়েছে এবং সংশ্লিষ্ট ডাক্তারের ড্যাশবোর্ডে যোগ করা হয়েছে!");
-    setNewPatient({ name: "", age: "", phone: "", address: "", doctor: "", date: "" });
-  };
-
-  return (
-    <div className="flex h-screen overflow-hidden bg-gray-50" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <aside className={`${sidebarOpen ? "w-64" : "w-16"} flex-shrink-0 bg-white border-r border-gray-100 flex flex-col transition-all duration-300 shadow-sm`}>
-        <div className="p-5 border-b border-gray-100"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#FF5E13" }}><Headphones className="w-5 h-5 text-white"/></div>{sidebarOpen && <span className="font-bold text-gray-900 text-sm">Agent Workspace</span>}</div></div>
-        
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map(item => (
-            <button key={item.id} onClick={() => setTab(item.id)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${tab === item.id ? "text-white shadow-md" : "text-gray-600 hover:bg-gray-50"}`} style={tab === item.id ? { background: "linear-gradient(135deg, #FF5E13, #D84315)" } : {}}>
-              {item.icon}{sidebarOpen && item.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
-
-      <main className="flex-1 overflow-y-auto p-6">
-        {tab === "add-patient" && (
-          <div className="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">নতুন রোগীর তথ্য এন্ট্রি</h2>
-            <form onSubmit={handlePatientSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <input type="text" placeholder="রোগীর নাম" className="w-full border p-3 rounded-xl text-sm" value={newPatient.name} onChange={e => setNewPatient({...newPatient, name: e.target.value})} required />
-                <input type="number" placeholder="বয়স" className="w-full border p-3 rounded-xl text-sm" value={newPatient.age} onChange={e => setNewPatient({...newPatient, age: e.target.value})} />
-              </div>
-              <input type="text" placeholder="মোবাইল নম্বর" className="w-full border p-3 rounded-xl text-sm" value={newPatient.phone} onChange={e => setNewPatient({...newPatient, phone: e.target.value})} required />
-              <input type="text" placeholder="ঠিকানা" className="w-full border p-3 rounded-xl text-sm" value={newPatient.address} onChange={e => setNewPatient({...newPatient, address: e.target.value})} />
-              <select className="w-full border p-3 rounded-xl text-sm text-gray-600" value={newPatient.doctor} onChange={e => setNewPatient({...newPatient, doctor: e.target.value})}>
-                <option value="">ডাক্তার নির্বাচন করুন</option>
-                <option value="dr_ahmed">ডা. আহমেদ করিম</option>
-                <option value="dr_sabina">ডা. সাবিনা ইসলাম</option>
-              </select>
-              <input type="date" className="w-full border p-3 rounded-xl text-sm text-gray-500" value={newPatient.date} onChange={e => setNewPatient({...newPatient, date: e.target.value})} />
-              <input type="file" className="w-full text-sm border p-2 rounded-xl" />
-              <button type="submit" className="w-full py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-all">সাবমিট করুন</button>
-            </form>
-          </div>
-        )}
-
-        {/* অন্যান্য ট্যাবগুলো আগের মতোই এখানে থাকবে... */}
-        {tab !== "add-patient" && (
-            <div className="flex items-center justify-center h-full text-gray-400">
-                অন্যান্য ট্যাবগুলো এখানে বিদ্যমান।
-            </div>
-        )}
-      </main>
-    </div>
-  );
-}// ============================================================
 // ADMIN DASHBOARD
 // ============================================================
 function AdminDashboard({ go, setAuth, agentList, setAgentList }: {
@@ -1971,6 +1902,8 @@ export default function App() {
   const [docPackage, setDocPackage] = useState<PackageKey>("pro");
   const [subscriptionDays, setSubscriptionDays] = useState(28);
   const [isDashboardBlocked, setIsDashboardBlocked] = useState(false);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [callList, setCallList] = useState<any[]>([]);
 
   const go = (v: View) => setView(v);
   const setAuth = (u: { name: string; role: Role } | null) => setAuthUser(u);
@@ -2006,7 +1939,30 @@ export default function App() {
       case "patient":
         return <PatientDashboard go={go} setAuth={() => setAuth(null)} />;
       case "agent":
-        return <AgentDashboard go={go} setAuth={() => setAuth(null)} />;
+        return (
+          <AgentDashboard 
+            go={go} 
+            setAuth={() => setAuth(null)}
+            currentUser={authUser} 
+            users={[]} // আপনার অ্যাপে যদি ডাক্তার বা অন্যান্য ইউজারের লিস্ট থাকে, তা এখানে দিন
+            patients={patients} // আপনার App.tsx এর পেশেন্ট স্টেট
+            callList={callList} // আপনার App.tsx এর কল লিস্ট স্টেট
+            onAddPatient={(newPatient) => {
+                setPatients(prev => [...prev, newPatient]);
+                setCallList(prev => [...prev, { 
+                    id: "call_" + Date.now(), 
+                    patientId: newPatient.id, 
+                    status: "pending", 
+                    agentId: authUser?.name 
+                }]);
+            }}
+            onCompleteCall={(id, note, date) => {
+                setCallList(prev => prev.map(c => 
+                    c.id === id ? { ...c, status: "completed", note, followupDate: date } : c
+                ));
+            }}
+          />
+        );
       case "admin":
         return <AdminDashboard go={go} setAuth={() => setAuth(null)} agentList={agentList} setAgentList={setAgentList} />;
       case "qrscan":
