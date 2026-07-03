@@ -1,6 +1,8 @@
-import { useState, useRef } from "react";
-import { registerUser, loginUser } from "../firebase/auth";
-import { auth } from "../firebase/config";
+import { useState, useEffect, useRef } from "react";
+import AdminDashboardFixed from "./components/AdminDashboardFixed";
+import { auth, db } from "../firebase/config";
+import { registerUser, loginUser, loginAdmin } from "../firebase/auth";
+import { collection, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 // src/app/app.tsx
 import AgentDashboard from './components/AgentDashboard';
 import {
@@ -19,6 +21,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, PieChart,
   Pie, Cell
 } from "recharts";
+
 
 // ============================================================
 // TYPES
@@ -373,16 +376,27 @@ function LoginPage({ go, setAuth }: { go: (v: View) => void; setAuth: (u: { name
   const handleLogin = async () => {
   setLoading(true);
   try {
-    const userData = await loginUser(identifier, password);
-    
-    // ১. অ্যাপের অথেন্টিকেশন স্টেট আপডেট করুন
-    // এটিই আপনার ড্যাশবোর্ডে ডেটা পাঠাবে
-    setAuth({ name: userData.name, role: userData.role });
-    
-    // ২. setCurrentUser(userData); // <--- এই লাইনটি মুছে ফেলুন, এটিই এরর তৈরি করছে
-    
-    // ৩. ইউজারের রোল অনুযায়ী ড্যাশবোর্ডে পাঠান
-    go(userData.role);
+    let userData;
+
+    // ১. চেক করা হচ্ছে ইউজার নাকি অ্যাডমিন লগইন করছে
+    if (role === "admin") {
+      // এটি আপনার auth.tsx-এ তৈরি করা নতুন ফাংশন
+      userData = await loginAdmin(identifier, password);
+    } else {
+      // এটি আপনার আগের ইউজার লগইন ফাংশন
+      userData = await loginUser(identifier, password);
+    }
+
+    // ২. অ্যাপের অথেন্টিকেশন স্টেট আপডেট
+    // অ্যাডমিন হলে নাম "Admin" হিসেবে সেট হবে
+    setAuth({ 
+      name: userData.name || "Admin", 
+      role: userData.role || "admin" 
+    });
+
+    // ৩. ইউজারের রোল অনুযায়ী সঠিক ড্যাশবোর্ডে রিডাইরেক্ট করুন
+    // যদি role 'admin' হয়, তবে এটি "admin" ভিউতে পাঠাবে
+    go(userData.role); 
     
   } catch (error: any) {
     alert("লগইন ব্যর্থ: " + error.message);
@@ -1671,226 +1685,7 @@ function PatientDashboard({ go, setAuth }: { go: (v: View) => void; setAuth: (u:
 // ============================================================
 
 // ============================================================
-// ADMIN DASHBOARD
-// ============================================================
-function AdminDashboard({ go, setAuth, agentList, setAgentList }: {
-  go: (v: View) => void; setAuth: (u: null) => void;
-  agentList: Agent[]; setAgentList: (a: Agent[]) => void;
-}) {
-  const [tab, setTab] = useState("doctors"); const [sidebarOpen, setSidebarOpen] = useState(true); const [doctorList, setDoctorList] = useState<DocMgmt[]>(INITIAL_DOCTORS); const [reportMonth, setReportMonth] = useState("জুন ২০২৫");
-  const navItems = [{ id: "doctors", label: "Doctor Management", icon: <Users className="w-5 h-5"/> }, { id: "agents", label: "Agent Management", icon: <UserCheck className="w-5 h-5"/> }, { id: "billing", label: "Billing & Finance", icon: <CreditCard className="w-5 h-5"/> }, { id: "reports", label: "Reports", icon: <BarChart2 className="w-5 h-5"/> }, { id: "system", label: "System Health", icon: <Activity className="w-5 h-5"/> }];
-  const updateAgent = (id: string, status: AgentStatus) => setAgentList(agentList.map(a => a.id === id ? { ...a, status } : a));
-  const toggleDoctorBlock = (id: string) => setDoctorList(doctorList.map(d => d.id === id ? { ...d, status: d.status === "blocked" ? "active" : "blocked", daysLeft: d.status === "blocked" ? 30 : 0 } : d));
-  const statusLabels: Record<AgentStatus, string> = { pending: "পেন্ডিং", interview: "ইন্টারভিউ", approved: "অ্যাপ্রুভড", suspended: "সাসপেন্ড" };
-  return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "#0f172a", fontFamily: "'Inter', sans-serif" }}>
-      <aside className={`${sidebarOpen ? "w-64" : "w-16"} flex-shrink-0 border-r border-white/10 flex flex-col transition-all duration-300`} style={{ background: "#1E293B" }}>
-        <div className="p-5 border-b border-white/10"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#FF5E13" }}><Shield className="w-5 h-5 text-white"/></div>{sidebarOpen && <span className="font-bold text-white text-sm">Admin Control</span>}</div></div>
-        {sidebarOpen && (<div className="p-4 border-b border-white/10"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: "#FF5E13" }}>A</div><div><div className="text-sm font-bold text-white">Super Admin</div><div className="text-xs text-gray-400">admin@medicare-bd.com</div></div></div></div>)}
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map(item => (<button key={item.id} onClick={() => setTab(item.id)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${tab === item.id ? "text-white shadow-md" : "text-gray-400 hover:text-white hover:bg-white/10"}`} style={tab === item.id ? { background: "#FF5E13" } : {}}>{item.icon}{sidebarOpen && item.label}</button>))}
-        </nav>
-        <div className="p-4 border-t border-white/10"><button onClick={() => { setAuth(null); go("landing"); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all"><LogOut className="w-5 h-5"/>{sidebarOpen && "Logout"}</button></div>
-      </aside>
-      <main className="flex-1 overflow-y-auto" style={{ background: "#0f172a" }}>
-        <div className="sticky top-0 z-10 px-6 py-4 flex items-center justify-between border-b border-white/10" style={{ background: "rgba(15,23,42,0.95)", backdropFilter: "blur(12px)" }}>
-          <div className="flex items-center gap-4"><button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-white"><Menu className="w-5 h-5"/></button><div><h1 className="font-bold text-white">{navItems.find(n => n.id === tab)?.label}</h1><p className="text-xs text-gray-500">Central Control Room</p></div></div>
-          <div className="flex items-center gap-1.5 bg-green-500/10 text-green-400 px-3 py-1.5 rounded-full text-xs font-semibold border border-green-500/20"><div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/>System Live</div>
-        </div>
-        <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[{ label: "নিবন্ধিত ডাক্তার", val: "৫০২", trend: "+১২", icon: <Users className="w-5 h-5"/> }, { label: "অ্যাক্টিভ এজেন্ট", val: "৩৮", trend: "+৩", icon: <Headphones className="w-5 h-5"/> }, { label: "মোট কল হ্যান্ডেল", val: "২৪,৮৯১", trend: "+৫৪৫", icon: <PhoneCall className="w-5 h-5"/> }, { label: "এই মাসের রেভিনিউ", val: "৩.৮২L৳", trend: "+১৮%", icon: <CreditCard className="w-5 h-5"/> }].map((s, i) => (
-              <div key={i} className="rounded-2xl p-5 border border-white/10" style={{ background: "#1E293B" }}>
-                <div className="flex items-center justify-between mb-3"><div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,94,19,0.15)", color: "#FF5E13" }}>{s.icon}</div><span className="text-xs text-green-400 font-semibold">{s.trend}</span></div>
-                <div className="text-xl font-bold text-white">{s.val}</div><div className="text-xs text-gray-500 mt-1">{s.label}</div>
-              </div>
-            ))}
-          </div>
 
-          {tab === "doctors" && (
-            <div className="rounded-2xl border border-white/10 overflow-hidden" style={{ background: "#1E293B" }}>
-              <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between"><h3 className="font-bold text-white">Doctor Management</h3><button className="text-xs text-white font-semibold px-4 py-2 rounded-xl hover:opacity-90" style={{ background: "#FF5E13" }}>+ নতুন ডাক্তার</button></div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead><tr className="border-b border-white/10">{["ডাক্তার", "প্যাকেজ", "রোগী", "সাবস্ক্রিপশন", "স্ট্যাটাস", "অ্যাকশন"].map(h => <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h}</th>)}</tr></thead>
-                  <tbody className="divide-y divide-white/5">
-                    {doctorList.map(d => (
-                      <tr key={d.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-5 py-4"><div className="font-semibold text-sm text-white">{d.name}</div><div className="text-xs text-gray-500">{d.spec}</div></td>
-                        <td className="px-5 py-4"><span className="text-xs px-2.5 py-1 rounded-full font-semibold text-white whitespace-nowrap" style={{ background: PACKAGES[d.pkg]?.color || "#64748B" }}>{PACKAGES[d.pkg]?.name || d.pkg}</span></td>
-                        <td className="px-5 py-4 text-sm text-gray-400">{d.patients}</td>
-                        <td className="px-5 py-4">{d.status !== "pending" && (<div><div className={`text-xs font-semibold ${d.daysLeft <= 7 ? "text-red-400" : d.daysLeft <= 14 ? "text-yellow-400" : "text-green-400"}`}>{d.daysLeft > 0 ? `${d.daysLeft} দিন বাকি` : "মেয়াদ শেষ"}</div><div className="w-20 h-1.5 bg-white/10 rounded-full mt-1 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.min((d.daysLeft / 30) * 100, 100)}%`, background: d.daysLeft <= 7 ? "#ef4444" : d.daysLeft <= 14 ? "#f97316" : "#22c55e" }}/></div></div>)}</td>
-                        <td className="px-5 py-4"><span className={`text-xs px-2.5 py-1 rounded-full font-medium ${d.status === "active" ? "bg-green-500/20 text-green-400" : d.status === "blocked" ? "bg-red-500/20 text-red-400" : "bg-yellow-500/20 text-yellow-400"}`}>{d.status === "active" ? "Active" : d.status === "blocked" ? "Blocked" : "Pending"}</span></td>
-                        <td className="px-5 py-4">
-                          <div className="flex gap-2 flex-nowrap">
-                            {d.status === "pending" && <button className="text-xs text-white px-3 py-1.5 rounded-lg hover:opacity-90 whitespace-nowrap" style={{ background: "#22c55e" }}>✓ Approve & Generate QR</button>}
-                            {d.status === "active" && <button onClick={() => toggleDoctorBlock(d.id)} className="text-xs text-red-400 px-3 py-1.5 rounded-lg border border-red-500/20 hover:bg-red-500/10 whitespace-nowrap">Block Dashboard</button>}
-                            {d.status === "blocked" && <button onClick={() => toggleDoctorBlock(d.id)} className="text-xs text-green-400 px-3 py-1.5 rounded-lg border border-green-500/20 hover:bg-green-500/10 whitespace-nowrap flex items-center gap-1"><RefreshCw className="w-3 h-3"/>Reactivate</button>}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {tab === "agents" && (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-white/10 p-6" style={{ background: "#1E293B" }}>
-                <h3 className="font-bold text-white mb-4">এজেন্ট–ডাক্তার অ্যাসাইনমেন্ট</h3>
-                <div className="flex items-center gap-4">
-                  <select className="flex-1 border border-white/20 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none" style={{ background: "#0f172a" }}>{agentList.filter(a => a.status === "approved").map(a => <option key={a.id} className="bg-gray-900">{a.name}</option>)}</select>
-                  <ArrowRight className="w-5 h-5 text-gray-500 flex-shrink-0"/>
-                  <select className="flex-1 border border-white/20 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none" style={{ background: "#0f172a" }}>{doctorList.map(d => <option key={d.id} className="bg-gray-900">{d.name}</option>)}</select>
-                  <button className="px-6 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 flex-shrink-0" style={{ background: "#FF5E13" }}>Assign</button>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-white/10 overflow-hidden" style={{ background: "#1E293B" }}>
-                <div className="px-6 py-4 border-b border-white/10"><h3 className="font-bold text-white">এজেন্ট আবেদন ও ভেরিফিকেশন</h3><p className="text-xs text-gray-500 mt-0.5">pending → interview → approved | suspend → reactivate</p></div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead><tr className="border-b border-white/10">{["এজেন্ট", "যোগ্যতা", "অভিজ্ঞতা", "তারিখ", "স্ট্যাটাস", "অ্যাকশন"].map(h => <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h}</th>)}</tr></thead>
-                    <tbody className="divide-y divide-white/5">
-                      {agentList.map(agent => (
-                        <tr key={agent.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-5 py-4"><div className="font-semibold text-sm text-white">{agent.name}</div><div className="text-xs text-gray-500">{agent.email}</div></td>
-                          <td className="px-5 py-4 text-sm text-gray-400 whitespace-nowrap">{agent.qualification}</td>
-                          <td className="px-5 py-4 text-sm text-gray-400 whitespace-nowrap">{agent.workExp}</td>
-                          <td className="px-5 py-4 text-sm text-gray-400 whitespace-nowrap">{agent.appliedDate}</td>
-                          <td className="px-5 py-4"><span className={`text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap ${agent.status === "approved" ? "bg-green-500/20 text-green-400" : agent.status === "interview" ? "bg-blue-500/20 text-blue-400" : agent.status === "pending" ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"}`}>{statusLabels[agent.status]}</span></td>
-                          <td className="px-5 py-4"><div className="flex gap-2 flex-nowrap">
-                            {agent.status === "pending" && <button onClick={() => updateAgent(agent.id, "interview")} className="text-xs text-blue-400 px-3 py-1.5 rounded-lg border border-blue-500/30 hover:bg-blue-500/10 whitespace-nowrap">ইন্টারভিউ শিডিউল</button>}
-                            {agent.status === "interview" && <button onClick={() => updateAgent(agent.id, "approved")} className="text-xs text-white px-3 py-1.5 rounded-lg hover:opacity-90 whitespace-nowrap" style={{ background: "#22c55e" }}>✓ Approve & Activate</button>}
-                            {agent.status === "approved" && <button onClick={() => updateAgent(agent.id, "suspended")} className="text-xs text-red-400 px-3 py-1.5 rounded-lg border border-red-500/20 hover:bg-red-500/10">Suspend</button>}
-                            {agent.status === "suspended" && <button onClick={() => updateAgent(agent.id, "approved")} className="text-xs text-green-400 px-3 py-1.5 rounded-lg border border-green-500/20 hover:bg-green-500/10">Reactivate</button>}
-                          </div></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {tab === "billing" && (
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="rounded-2xl border border-white/10 p-6" style={{ background: "#1E293B" }}>
-                <h3 className="font-bold text-white mb-4">পেমেন্ট পেন্ডিং ভেরিফিকেশন</h3>
-                <div className="space-y-3">
-                  {[{ doctor: "ডা. আহমেদ করিম", pkg: "প্রো", amount: "৩,০০০৳", method: "bKash", txId: "TXN9BK123" }, { doctor: "ডা. রেহানা পারভীন", pkg: "প্রো", amount: "৩,০০০৳", method: "Nagad", txId: "TXN9NG456" }].map((b, i) => (
-                    <div key={i} className="flex items-center justify-between py-3 border-b border-white/10 last:border-0">
-                      <div><div className="text-sm font-semibold text-white">{b.doctor}</div><div className="text-xs text-gray-500">{b.pkg} · {b.method} · {b.txId}</div></div>
-                      <div className="flex items-center gap-3"><div className="text-sm font-bold text-orange-400">{b.amount}</div><button className="text-xs text-white px-3 py-1.5 rounded-lg hover:opacity-90" style={{ background: "#22c55e" }}>✓ Verify</button></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-white/10 p-6" style={{ background: "#1E293B" }}>
-                <h3 className="font-bold text-white mb-4">রেভিনিউ সারসংক্ষেপ</h3>
-                <div className="space-y-4">
-                  {[{ label: "পার-পেশেন্ট রেভিনিউ", val: "১,৮২,৫০০৳", color: "text-orange-400" }, { label: "সাবস্ক্রিপশন রেভিনিউ", val: "২,০০,০০০৳", color: "text-green-400" }, { label: "মোট এই মাসে", val: "৩,৮২,৫০০৳", color: "text-white", bold: true }].map((r, i) => (
-                    <div key={i} className={`flex justify-between ${r.bold ? "border-t border-white/10 pt-4 font-bold" : ""}`}><span className="text-sm text-gray-400">{r.label}</span><span className={`text-sm font-bold ${r.color}`}>{r.val}</span></div>
-                  ))}
-                </div>
-                <button className="w-full mt-6 py-3 rounded-xl text-white font-semibold text-sm hover:opacity-90" style={{ background: "#FF5E13" }}>📲 Generate Invoice & Send to WhatsApp</button>
-                <button className="w-full mt-2 py-2.5 rounded-xl text-gray-400 text-sm border border-white/10 hover:bg-white/5">✉ Send Invoice via Email</button>
-              </div>
-            </div>
-          )}
-
-          {tab === "reports" && (
-            <div className="space-y-6">
-              <div className="rounded-2xl border border-white/10 p-6" style={{ background: "#1E293B" }}>
-                <div className="flex items-center justify-between mb-6">
-                  <div><h3 className="font-bold text-white text-lg">প্ল্যাটফর্ম মাসিক রিপোর্ট</h3><p className="text-xs text-gray-500 mt-0.5">Admin — Central Control Room</p></div>
-                  <select value={reportMonth} onChange={e => setReportMonth(e.target.value)} className="border border-white/20 text-white rounded-xl px-4 py-2 text-sm focus:outline-none" style={{ background: "#0f172a" }}>{["জুন ২০২৫", "মে ২০২৫", "এপ্রিল ২০২৫"].map(m => <option key={m} className="bg-gray-900">{m}</option>)}</select>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  {[{ label: "মোট ডাক্তার", val: "৫০২" }, { label: "অ্যাক্টিভ এজেন্ট", val: "৩৮" }, { label: "কল হ্যান্ডেল", val: "২৪,৮৯১" }, { label: "রেভিনিউ", val: "৩.৮২L৳" }].map((s, i) => (
-                    <div key={i} className="rounded-xl p-4 border border-white/10" style={{ background: "#0f172a" }}><div className="text-xl font-bold text-white">{s.val}</div><div className="text-xs text-gray-500 mt-0.5">{s.label}</div></div>
-                  ))}
-                </div>
-                <div className="mb-6">
-                  <h4 className="text-sm font-semibold text-gray-400 mb-3">সাপ্তাহিক কার্যক্রম</h4>
-                  <ResponsiveContainer width="100%" height={180}><BarChart data={PERF_DATA}><CartesianGrid strokeDasharray="3 3" stroke="#ffffff10"/><XAxis dataKey="day" tick={{ fontSize: 11, fill: "#94a3b8" }}/><YAxis tick={{ fontSize: 11, fill: "#94a3b8" }}/><Tooltip contentStyle={{ background: "#1E293B", border: "none", borderRadius: "12px", color: "white" }}/><Bar dataKey="calls" fill="#FF5E13" radius={[4, 4, 0, 0]}/></BarChart></ResponsiveContainer>
-                </div>
-                <div className="flex gap-3">
-                  <button className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm text-white hover:opacity-90" style={{ background: "#FF5E13" }}><Download className="w-4 h-4"/> PDF ডাউনলোড</button>
-                  <button className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border border-white/10 text-gray-300 hover:bg-white/5"><Mail className="w-4 h-4"/> ইমেইলে পাঠান</button>
-                  <button className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border border-green-500/30 text-green-400 hover:bg-green-500/10"><Phone className="w-4 h-4"/> WhatsApp</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {tab === "system" && (
-            <div className="grid md:grid-cols-2 gap-6">
-              {[{ label: "API Status", val: "99.9% Uptime", detail: "Last checked: 2 min ago" }, { label: "Database", val: "Healthy", detail: "2.3ms avg query time" }, { label: "Call System", val: "Operational", detail: "42 active calls" }, { label: "QR Service", val: "Operational", detail: "1,240 QR codes generated" }].map((s, i) => (
-                <div key={i} className="rounded-2xl border border-white/10 p-6" style={{ background: "#1E293B" }}>
-                  <div className="flex items-center justify-between mb-3"><span className="text-sm font-semibold text-white">{s.label}</span><div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/><span className="text-xs text-green-400 font-semibold">Operational</span></div></div>
-                  <div className="text-xl font-bold text-green-400">{s.val}</div><div className="text-xs text-gray-500 mt-1">{s.detail}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  );
-}
-
-// ============================================================
-// QR SCAN PAGE
-// ============================================================
-function QRScanPage({ go }: { go: (v: View) => void }) {
-  const [name, setName] = useState(""); const [phone, setPhone] = useState(""); const [fileName, setFileName] = useState(""); const [submitted, setSubmitted] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const isValid = name.trim().length > 0 && phone.length >= 11 && fileName.length > 0;
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12" style={{ background: "linear-gradient(135deg, #FF5E13 0%, #D84315 100%)", fontFamily: "'Hind Siliguri', 'Inter', sans-serif" }}>
-      {submitted ? (
-        <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center">
-          <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4"/>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">সফলভাবে জমা হয়েছে!</h2>
-          <p className="text-gray-500 text-sm mb-6">আমাদের এজেন্ট শীঘ্রই আপনার সাথে যোগাযোগ করবেন।</p>
-          <button onClick={() => go("patient")} className="w-full py-3 rounded-xl text-white font-bold hover:opacity-90" style={{ background: "#FF5E13" }}>আমার পোর্টালে যান →</button>
-          <button onClick={() => go("landing")} className="w-full mt-3 py-2.5 rounded-xl text-gray-600 text-sm border border-gray-200 hover:bg-gray-50">হোম পেজে ফিরুন</button>
-        </div>
-      ) : (
-        <div className="w-full max-w-sm">
-          <div className="text-center mb-6">
-            <img src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=100&h=100&fit=crop&auto=format" alt="Doctor" className="w-20 h-20 rounded-full mx-auto mb-3 border-4 border-white shadow-xl bg-gray-200"/>
-            <h2 className="text-white text-xl font-bold">ডক্টর আহমেদ করিম-এর</h2>
-            <p className="text-orange-200 text-sm mt-1">ডিজিটাল ফলো-আপ অ্যাসিস্ট্যান্সে আপনাকে স্বাগতম।</p>
-          </div>
-          <div className="bg-white/15 backdrop-blur-md border border-white/20 rounded-3xl p-6">
-            <div className="space-y-4">
-              <div><label className="text-white/80 text-sm font-semibold block mb-1.5">আপনার নাম লিখুন</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="পূর্ণ নাম" className="w-full bg-white/15 border border-white/30 text-white placeholder-white/40 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-white/60"/>
-              </div>
-              <div><label className="text-white/80 text-sm font-semibold block mb-1.5">মোবাইল নম্বর</label>
-                <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="01XXXXXXXXX" className="w-full bg-white/15 border border-white/30 text-white placeholder-white/40 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-white/60"/>
-              </div>
-              <div><label className="text-white/80 text-sm font-semibold block mb-1.5">প্রেসক্রিপশন আপলোড করুন</label>
-                <div onClick={() => fileRef.current?.click()} className="border-2 border-dashed border-white/40 rounded-2xl p-8 text-center cursor-pointer hover:border-white/60 hover:bg-white/5 transition-all">
-                  <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={e => setFileName(e.target.files?.[0]?.name || "")}/>
-                  {fileName ? (<div className="text-white"><CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-300"/><p className="text-sm font-medium truncate">{fileName}</p></div>) : (<div className="text-white/60"><Camera className="w-10 h-10 mx-auto mb-2"/><p className="text-sm">এখানে ক্লিক করে ছবি তুলুন বা আপলোড করুন</p></div>)}
-                </div>
-              </div>
-              <button onClick={() => setSubmitted(true)} disabled={!isValid} className={`w-full py-4 rounded-2xl font-bold text-lg transition-all ${isValid ? "bg-white hover:bg-orange-50 shadow-lg" : "bg-white/20 text-white/50 cursor-not-allowed"}`} style={isValid ? { color: "#FF5E13" } : {}}>
-                জমা দিন (Submit)
-              </button>
-            </div>
-          </div>
-          <button onClick={() => go("landing")} className="mt-5 w-full text-center text-white/70 text-sm hover:text-white transition-colors">← হোম পেজে ফিরুন</button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ============================================================
 // MAIN APP
@@ -1898,83 +1693,145 @@ function QRScanPage({ go }: { go: (v: View) => void }) {
 export default function App() {
   const [view, setView] = useState<View>("landing");
   const [authUser, setAuthUser] = useState<{ name: string; role: Role } | null>(null);
-  const [agentList, setAgentList] = useState<Agent[]>(INITIAL_AGENTS);
+  
+  // Firebase থেকে ডাটা আসার জন্য নতুন স্টেট
+  const [agentList, setAgentList] = useState<any[]>([]);
+  const [doctorList, setDoctorList] = useState<any[]>([]);
+  
   const [docPackage, setDocPackage] = useState<PackageKey>("pro");
   const [subscriptionDays, setSubscriptionDays] = useState(28);
   const [isDashboardBlocked, setIsDashboardBlocked] = useState(false);
   const [patients, setPatients] = useState<any[]>([]);
   const [callList, setCallList] = useState<any[]>([]);
+const [patientList, setPatientList] = useState<any[]>([]);
+  // Firebase Real-time Listener
+  useEffect(() => {
+    const unsubAgents = onSnapshot(collection(db, "agents"), (snapshot) => {
+      setAgentList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    const unsubDoctors = onSnapshot(collection(db, "doctors"), (snapshot) => {
+      setDoctorList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => { unsubAgents(); unsubDoctors(); };
+  }, []);
 
+  // AdminDashboard এর জন্য প্রয়োজনীয় ফাংশন
+  const handleUpdateAgent = async (id: string, status: string) => {
+    await updateDoc(doc(db, "agents", id), { status });
+  };
+
+  const handleToggleDoctor = async (id: string) => {
+    const docRef = doc(db, "doctors", id);
+    const doctor = doctorList.find((d: any) => d.id === id);
+    if (doctor) {
+      await updateDoc(docRef, { status: doctor.status === "active" ? "blocked" : "active" });
+    }
+  };
+
+  const handleAssignCall = async (agentId: string, doctorId: string) => {
+    await addDoc(collection(db, "call_assignments"), {
+      agentId, doctorId, timestamp: serverTimestamp()
+    });
+    alert("কল সফলভাবে অ্যাসাইন হয়েছে!");
+  };
+  const handleAddPatient = async (newPatient: any) => {
+  try {
+    // ১. অ্যাডমিন টেবিলের সাথে মিল রেখে ডাটা সাজানো
+    const patientPayload = {
+      name: newPatient.name,
+      phone: newPatient.phone,
+      doctorName: newPatient.doctor || newPatient.doctorName,
+      disease: newPatient.prescription || newPatient.disease,
+      age: newPatient.age,
+      address: newPatient.address,
+      followups: [], // এটি টেবিলের ম্যাপ ফাংশনের এরর এড়াতে বাধ্যতামূলক
+      assignedAgentId: null,
+      createdAt: serverTimestamp() // ফায়ারবেসের সার্ভার টাইমস্ট্যাম্প
+    };
+
+    // ২. ফায়ারবেসে সেভ করা
+    const docRef = await addDoc(collection(db, "patients"), patientPayload);
+    
+    // ৩. স্টেট আপডেট করা (অ্যাডমিন ড্যাশবোর্ডে সাথে সাথে দেখাবে)
+    setPatientList(prev => [...prev, { id: docRef.id, ...patientPayload }]);
+    
+    alert("রোগী সফলভাবে ডাটাবেসে যোগ হয়েছে!");
+  } catch (error) {
+    console.error("Error adding patient: ", error);
+    alert("রোগী যোগ করতে সমস্যা হয়েছে, দয়া করে আবার চেষ্টা করুন।");
+  }
+};
   const go = (v: View) => setView(v);
   const setAuth = (u: { name: string; role: Role } | null) => setAuthUser(u);
 
-  // ভিউ অনুযায়ী পেজ রেন্ডার করার ফাংশন
   const renderView = () => {
     switch (view) {
-      case "landing":
-        return <LandingPage go={go} />;
-      case "login":
-        return <LoginPage go={go} setAuth={setAuth} />;
-      case "register":
-        return <RegisterPage go={go} setDocPackage={setDocPackage} />;
-      case "doctor-payment":
-        return <DoctorPaymentPage go={go} docPackage={docPackage} />;
-      case "doctor-pending":
-        return <DoctorPendingPage go={go} docPackage={docPackage} />;
-      case "pending":
-        return <PendingApprovalPage go={go} />;
+      case "landing": return <LandingPage go={go} />;
+      case "login": return <LoginPage go={go} setAuth={setAuth} />;
+      case "register": return <RegisterPage go={go} setDocPackage={setDocPackage} />;
+      case "doctor-payment": return <DoctorPaymentPage go={go} docPackage={docPackage} />;
+      case "doctor-pending": return <DoctorPendingPage go={go} docPackage={docPackage} />;
+      case "pending": return <PendingApprovalPage go={go} />;
       case "doctor":
         return (
           <DoctorDashboard
-            user={authUser} // এখানে currentUser এর পরিবর্তে authUser ব্যবহার করুন
-            go={go}
-            setAuth={() => setAuth(null)}
-            docPackage={docPackage}
-            subscriptionDays={subscriptionDays}
+            user={authUser} go={go} setAuth={() => setAuth(null)}
+            docPackage={docPackage} subscriptionDays={subscriptionDays}
             setSubscriptionDays={setSubscriptionDays}
             isDashboardBlocked={isDashboardBlocked}
             setIsDashboardBlocked={setIsDashboardBlocked}
           />
         );
-      case "patient":
-        return <PatientDashboard go={go} setAuth={() => setAuth(null)} />;
+      case "patient": return <PatientDashboard go={go} setAuth={() => setAuth(null)} />;
       case "agent":
-        return (
-          <AgentDashboard 
-            go={go} 
-            setAuth={() => setAuth(null)}
-            currentUser={authUser} 
-            users={[]} // আপনার অ্যাপে যদি ডাক্তার বা অন্যান্য ইউজারের লিস্ট থাকে, তা এখানে দিন
-            patients={patients} // আপনার App.tsx এর পেশেন্ট স্টেট
-            callList={callList} // আপনার App.tsx এর কল লিস্ট স্টেট
-            onAddPatient={(newPatient) => {
-                setPatients(prev => [...prev, newPatient]);
-                setCallList(prev => [...prev, { 
-                    id: "call_" + Date.now(), 
-                    patientId: newPatient.id, 
-                    status: "pending", 
-                    agentId: authUser?.name 
-                }]);
-            }}
-            onCompleteCall={(id, note, date) => {
-                setCallList(prev => prev.map(c => 
-                    c.id === id ? { ...c, status: "completed", note, followupDate: date } : c
-                ));
-            }}
-          />
-        );
-      case "admin":
-        return <AdminDashboard go={go} setAuth={() => setAuth(null)} agentList={agentList} setAgentList={setAgentList} />;
-      case "qrscan":
-        return <QRScanPage go={go} />;
-      default:
-        return <LandingPage go={go} />;
-    }
-  };
-
   return (
-    <div className="w-full min-h-screen bg-gray-50">
-      {renderView()}
-    </div>
-  );
+    <AgentDashboard 
+      go={go} 
+      setAuth={() => setAuth(null)} 
+      currentUser={authUser} 
+      users={[]} 
+      patients={patients} 
+      callList={callList}
+      
+      // ডাটাবেস এবং স্টেট আপডেট করার জন্য সেন্ট্রাল ফাংশনটি কল করছি
+      onAddPatient={(p) => { 
+        const newPatientData = {
+          ...p,
+          doctorName: p.doctor,           
+          disease: p.prescription,        
+          followups: [],                  
+          assignedAgentId: null,          
+          createdAt: new Date().toISOString()
+        };
+        
+        handleAddPatient(newPatientData); // এটি আপনার সেই মেইন ফাংশনটি কল করবে
+      }}
+      
+      onCompleteCall={(id, note, date) => {
+        setCallList(prev => prev.map(c => c.id === id ? { ...c, status: "completed", note, followupDate: date } : c));
+      }}
+    />
+  );;
+  case "admin":
+      return (
+        <AdminDashboardFixed 
+          go={go} 
+          setAuth={() => setAuth(null)} 
+          agentList={agentList} 
+          doctorList={doctorList}
+          onUpdateAgent={handleUpdateAgent}
+          onToggleDoctor={handleToggleDoctor}
+          onAssignCall={handleAssignCall}
+          onAddPatient={handleAddPatient} 
+          patientList={patientList}      
+        />
+      ); // <--- এখানে এই ) এবং ; টি অবশ্যই থাকতে হবে
+    case "qrscan": 
+      return <QRScanPage go={go} />;
+    default: 
+      return <LandingPage go={go} />;
+  }
+};
+
+return <div className="w-full min-h-screen bg-gray-50">{renderView()}</div>;
 }

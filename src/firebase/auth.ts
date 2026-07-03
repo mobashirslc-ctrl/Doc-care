@@ -48,3 +48,23 @@ export const loginUser = async (email: string, password: string) => {
 
   return { ...userCredential.user, ...userData };
 };
+// ২. অ্যাডমিন লগইন (রেজিস্ট্রেশন ছাড়াই সরাসরি অ্যাক্সেস)
+export const loginAdmin = async (email: string, password: string) => {
+  // কনফার্ম করুন যে ইমেইলটি আপনার অ্যাডমিন ইমেইল
+  const ADMIN_EMAIL = "admintech@gmail.com"; 
+
+  if (email !== ADMIN_EMAIL) {
+    throw new Error("আপনি অ্যাডমিন নন!");
+  }
+
+  // Firebase Auth দিয়ে লগইন
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  
+  // অ্যাডমিন হিসেবে সাকসেসফুল লগইন রিটার্ন
+  return { ...userCredential.user, role: "admin" };
+};
+
+// ৩. লগআউট ফাংশন
+export const logoutUser = async () => {
+  await signOut(auth);
+};

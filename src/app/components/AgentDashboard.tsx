@@ -34,8 +34,7 @@ function AgentDashboard({
   onCompleteCall?: (callId: string, note: string, nextFollowupDate?: string) => void;
 }) {
   // হুকটি এখানে ফাংশনের বডির ভেতরে নিয়ে এসেছি
-  const { completeCallAndScheduleNext } = useFollowupManager(callList);
-
+  const { completeCallAndScheduleNext, callList: updatedCallList } = useFollowupManager(callList);
   const [tab, setTab] = useState("queue"); 
   const [selectedItem, setSelectedItem] = useState<any>(null); 
   const [calling, setCalling] = useState(false); 
@@ -52,22 +51,23 @@ function AgentDashboard({
   const agentId = currentUser?.id || "rafi_hasan";
 
   // ডাইনামিক কিউ বা কল লিস্ট ফিল্টারিং
-  const dynamicQueue = (callList || [])
-    .filter((c: any) => c.agentId === agentId && c.status === "pending")
-    .map((c: any) => {
-      const p = (patients || []).find((pat: any) => pat.id === c.patientId);
-      return {
-        id: c.id,
-        patient: p?.name || "অজানা রোগী",
-        phone: p?.phone || "N/A",
-        type: c.type || "call",
-        urgent: c.urgent || false,
-        time: c.scheduledDate || "আজকে",
-        doctor: p?.doctor || "অনির্ধারিত",
-        patientId: c.patientId
-      };
-    });
-
+  const dynamicQueue = (updatedCallList || [])
+  .filter((c: any) => c.agentId === agentId && c.status === "pending")
+  .map((c: any) => {
+    const p = (patients || []).find((pat: any) => pat.id === c.patientId);
+    return {
+      id: c.id,
+      patient: p?.name || "অজানা রোগী",
+      phone: p?.phone || "N/A",
+      type: c.type || "call",
+      urgent: c.urgent || false,
+      time: c.scheduledDate || "আজকে",
+      // এখানে পরিবর্তন হবে: doctor এর বদলে doctorName এবং prescription এর বদলে disease
+      doctor: p?.doctorName || p?.doctor || "অনির্ধারিত", 
+      disease: p?.disease || "N/A", 
+      patientId: c.patientId
+    };
+  });
   const displayQueue = dynamicQueue.length > 0 ? dynamicQueue : (typeof QUEUE !== "undefined" ? QUEUE : []);
   const displayPatients = (patients && patients.length > 0) ? patients : (typeof PATIENTS !== "undefined" ? PATIENTS : []);
   const displayPerfData = typeof PERF_DATA !== "undefined" ? PERF_DATA : DEFAULT_PERF;
@@ -76,36 +76,31 @@ function AgentDashboard({
 
  
   
-  // ১. নতুন রোগী ম্যানুয়াল এন্ট্রি লজিক (যা সরাসরি পেন্ডিং কল লিস্টে পাঠাবে)
   const handlePatientSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPatient.name || !newPatient.phone) {
-      alert("রোগীর নাম এবং মোবাইল নম্বর দেওয়া বাধ্যতামূলক!");
-      return;
-    }
+  e.preventDefault();
+  
+  // ভ্যালিডেশন চেক
+  if (!newPatient.name || !newPatient.phone) {
+    alert("রোগীর নাম এবং মোবাইল নম্বর দেওয়া বাধ্যতামূলক!");
+    return;
+  }
 
-    const generatedPatientId = "p_" + Date.now();
-    const patientPayload = {
-      id: generatedPatientId,
-      name: newPatient.name,
-      age: newPatient.age,
-      phone: newPatient.phone,
-      address: newPatient.address,
-      doctor: newPatient.doctor,
-      prescription: newPatient.prescription,
-      status: "active", // যতক্ষণ না ডাক্তার ক্লোজ করছে এটি একটিভ থাকবে
-      agentId: agentId
-    };
+  // এখানে সেই অংশটি বসবে যা আপনি জিজ্ঞেস করেছেন
+  onAddPatient({
+    name: newPatient.name,            // ফর্মের স্টেট থেকে আসা নাম
+    phone: newPatient.phone,          // ফর্মের স্টেট থেকে আসা ফোন
+    doctor: newPatient.doctor,        // এটি App.tsx এ গিয়ে doctorName হয়ে যাচ্ছে
+    prescription: newPatient.prescription, // এটি App.tsx এ গিয়ে disease হয়ে যাচ্ছে
+    age: newPatient.age,
+    address: newPatient.address
+  });
 
-    if (onAddPatient) {
-      onAddPatient(patientPayload);
-    }
-
-    alert("রোগীর তথ্য সফলভাবে এন্ট্রি হয়েছে এবং এটি আপনার কল লিস্টের Active Queue-তে যোগ হয়েছে!");
-    setNewPatient({ name: "", age: "", phone: "", address: "", doctor: "", prescription: "" });
-    setTab("queue"); // এন্ট্রি শেষে সরাসরি কিউতে নিয়ে যাবে
-  };
-
+  alert("রোগীর তথ্য সফলভাবে এন্ট্রি হয়েছে!");
+  
+  // ফর্ম রিসেট
+  setNewPatient({ name: "", age: "", phone: "", address: "", doctor: "", prescription: "" });
+  setTab("queue");
+};
   // ২. কল শেষ করে রেকর্ড সেভ করা এবং ২ দিন পরের ফলো-আপ শিডিউলিং লজিক
   // ২. কল শেষ করে রেকর্ড সেভ করা এবং ২ দিন পরের ফলো-আপ শিডিউলিং লজিক
 // ২. কল শেষ করে রেকর্ড সেভ করা এবং ২ দিন পরের ফলো-আপ শিডিউলিং লজিক
@@ -138,7 +133,7 @@ const handleEndCallAndSave = () => {
   ];
 
   // পারফরম্যান্স ক্যালকুলেশন
-  const todayDoneCalls = (callList || []).filter((c: any) => c.agentId === agentId && c.status === "completed").length;
+  const todayDoneCalls = (updatedCallList || []).filter((c: any) => c.agentId === agentId && c.status === "completed").length;
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50" style={{ fontFamily: "'Inter', sans-serif" }}>
