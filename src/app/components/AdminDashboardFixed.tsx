@@ -26,42 +26,61 @@ export default function AdminDashboardFixed({
   onAddPatient, 
   patientList // এই অংশটি নিশ্চিত করুন যোগ করেছেন
 }: any) {
-    const [newPatient, setNewPatient] = useState({ 
+   // --- সব স্টেট গুলো এখানে একবারই থাকবে ---
+const [newPatient, setNewPatient] = useState({ 
     name: "", age: "", phone: "", address: "", doctor: "", prescription: "" 
-  });
-   const [tab, setTab] = useState("doctors");
+});
+
+const [newAgent, setNewAgent] = useState({ 
+    name: "", phone: "", email: "", password: "" 
+});
+
+const [tab, setTab] = useState("doctors");
 const [sidebarOpen, setSidebarOpen] = useState(true);
 const [selectedAgentId, setSelectedAgentId] = useState("");
 const [selectedDoctorId, setSelectedDoctorId] = useState("");
-const [reportMonth, setReportMonth] = useState("জুন ২০২৫"); // এটি মিসিং ছিল
+const [reportMonth, setReportMonth] = useState("জুন ২০২৫");
 const [stats, setStats] = useState({ totalDocs: 0, activeAgents: 0, totalPatients: 0 });
+
+// --- সব ফাংশন গুলো এখানে ---
+const handleAddAgent = async () => {
+    if (!newAgent.email || !newAgent.password) {
+        alert("সব তথ্য পূরণ করুন!");
+        return;
+    }
+    console.log("এজেন্ট যুক্ত হচ্ছে:", newAgent);
+    alert("এজেন্ট অনবোর্ড করা হয়েছে!");
+    // ফর্ম খালি করার জন্য:
+    setNewAgent({ name: "", phone: "", email: "", password: "" });
+};
+
 const handlePatientSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPatient.name || !newPatient.phone) {
-      alert("রোগীর নাম এবং মোবাইল নম্বর দেওয়া বাধ্যতামূলক!");
-      return;
+        alert("রোগীর নাম এবং মোবাইল নম্বর দেওয়া বাধ্যতামূলক!");
+        return;
     }
 
     const patientPayload = {
-      ...newPatient,
-      id: "p_" + Date.now(),
-      status: "pending", 
-      assignedAgentId: null, 
-      createdAt: new Date().toISOString()
+        ...newPatient,
+        id: "p_" + Date.now(),
+        status: "pending", 
+        assignedAgentId: null, 
+        createdAt: new Date().toISOString()
     };
 
     if (onAddPatient) {
-      onAddPatient(patientPayload);
+        onAddPatient(patientPayload);
     }
 
-    alert("সফলভাবে এন্ট্রি হয়েছে! এখন কল ম্যানেজার থেকে এজেন্ট এসাইন করুন।");
+    alert("সফলভাবে এন্ট্রি হয়েছে!");
     
     setNewPatient({ 
-      name: "", age: "", phone: "", address: "", doctor: "", prescription: "" 
+        name: "", age: "", phone: "", address: "", doctor: "", prescription: "" 
     });
 
     setTab("calls");
-  };
+};
    const statusLabels: any = {
   pending: "Pending",
   interview: "Interviewing",
@@ -276,6 +295,62 @@ const handlePatientSubmit = (e: React.FormEvent) => {
        
         {tab === "agents" && (
   <div className="space-y-4">
+    {/* এজেন্ট অনবোর্ডিং ফর্ম */}
+<div className="max-w-xl bg-[#1E293B] p-8 rounded-2xl shadow-sm border border-white/10 mb-6">
+  <h2 className="text-xl font-bold text-white mb-2">নতুন এজেন্ট অনবোর্ড করুন</h2>
+  <p className="text-gray-400 mb-6 text-sm">নতুন এজেন্টের তথ্য পূরণ করে সিস্টেম এন্ট্রি করুন।</p>
+  
+  <div className="space-y-4">
+    <div>
+      <label className="block text-sm font-medium text-gray-300">এজেন্টের নাম</label>
+      <input 
+        className="w-full p-3 mt-1 bg-[#0f172a] border border-white/10 text-white rounded-xl focus:ring-2 focus:ring-[#FF5E13] outline-none"
+        placeholder="পুরো নাম লিখুন"
+        value={newAgent.name}
+        onChange={(e) => setNewAgent({...newAgent, name: e.target.value})}
+      />
+    </div>
+
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-300">মোবাইল নম্বর</label>
+        <input 
+          className="w-full p-3 mt-1 bg-[#0f172a] border border-white/10 text-white rounded-xl focus:ring-2 focus:ring-[#FF5E13] outline-none"
+          placeholder="01XXXXXXXXX"
+          value={newAgent.phone}
+          onChange={(e) => setNewAgent({...newAgent, phone: e.target.value})}
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-300">ইমেইল এড্রেস</label>
+        <input 
+          className="w-full p-3 mt-1 bg-[#0f172a] border border-white/10 text-white rounded-xl focus:ring-2 focus:ring-[#FF5E13] outline-none"
+          placeholder="email@example.com"
+          value={newAgent.email}
+          onChange={(e) => setNewAgent({...newAgent, email: e.target.value})}
+        />
+      </div>
+    </div>
+
+    <div>
+      <label className="block text-sm font-medium text-gray-300">অস্থায়ী পাসওয়ার্ড</label>
+      <input 
+        type="password"
+        className="w-full p-3 mt-1 bg-[#0f172a] border border-white/10 text-white rounded-xl focus:ring-2 focus:ring-[#FF5E13] outline-none"
+        placeholder="••••••••"
+        value={newAgent.password}
+        onChange={(e) => setNewAgent({...newAgent, password: e.target.value})}
+      />
+    </div>
+
+    <button 
+      onClick={handleAddAgent} 
+      className="w-full mt-4 py-3 bg-[#FF5E13] text-white font-bold rounded-xl hover:bg-[#e65410] transition-all shadow-lg"
+    >
+      এজেন্ট অনবোর্ড করুন
+    </button>
+  </div>
+</div>
     {/* এজেন্ট–ডাক্তার অ্যাসাইনমেন্ট বক্স */}
     <div className="rounded-2xl border border-white/10 p-6" style={{ background: "#1E293B" }}>
       <h3 className="font-bold text-white mb-4">এজেন্ট–ডাক্তার অ্যাসাইনমেন্ট</h3>

@@ -45,6 +45,7 @@ function AgentDashboard({
 
   // নতুন রোগীর স্টেটস
   const [newPatient, setNewPatient] = useState({ name: "", age: "", phone: "", address: "", doctor: "", prescription: "" });
+  const [newAgent, setNewAgent] = useState({ name: "", phone: "", email: "", password: "" });
 
   // এজেন্টের নাম ও আইডি নির্ধারণ
   const agentName = currentUser?.name || "রাফি হাসান";
@@ -79,26 +80,35 @@ function AgentDashboard({
   const handlePatientSubmit = (e: React.FormEvent) => {
   e.preventDefault();
   
-  // ভ্যালিডেশন চেক
   if (!newPatient.name || !newPatient.phone) {
     alert("রোগীর নাম এবং মোবাইল নম্বর দেওয়া বাধ্যতামূলক!");
     return;
   }
 
-  // এখানে সেই অংশটি বসবে যা আপনি জিজ্ঞেস করেছেন
+  // ডাটা পাঠানো হচ্ছে
   onAddPatient({
-    name: newPatient.name,            // ফর্মের স্টেট থেকে আসা নাম
-    phone: newPatient.phone,          // ফর্মের স্টেট থেকে আসা ফোন
-    doctor: newPatient.doctor,        // এটি App.tsx এ গিয়ে doctorName হয়ে যাচ্ছে
-    prescription: newPatient.prescription, // এটি App.tsx এ গিয়ে disease হয়ে যাচ্ছে
+    name: newPatient.name,
+    phone: newPatient.phone,
+    doctor: newPatient.doctor,
+    prescription: newPatient.prescription, // যদি ডিজিজ আলাদা না থাকে, এটিই ডিজিজ হিসেবে যাবে
+    disease: newPatient.disease,           // নতুন যোগ করা ফিল্ড
     age: newPatient.age,
     address: newPatient.address
   });
 
   alert("রোগীর তথ্য সফলভাবে এন্ট্রি হয়েছে!");
   
-  // ফর্ম রিসেট
-  setNewPatient({ name: "", age: "", phone: "", address: "", doctor: "", prescription: "" });
+  // ফর্ম রিসেট (নতুন ফিল্ডসহ)
+  setNewPatient({ 
+    name: "", 
+    age: "", 
+    phone: "", 
+    address: "", 
+    doctor: "", 
+    prescription: "", 
+    disease: "" 
+  });
+  
   setTab("queue");
 };
   // ২. কল শেষ করে রেকর্ড সেভ করা এবং ২ দিন পরের ফলো-আপ শিডিউলিং লজিক
@@ -122,6 +132,30 @@ const handleEndCallAndSave = () => {
   setNote("");
   setSelectedItem(null);
   alert("কল সম্পন্ন হয়েছে! সিস্টেম ২ দিন পরের জন্য ফলো-আপ শিডিউল করেছে।");
+};
+const handleAddAgent = async () => {
+  if (!newAgent.email || !newAgent.password) return alert("ইমেইল এবং পাসওয়ার্ড আবশ্যক!");
+
+  // ফায়ারবেস অথেনটিকেশনে ইউজার তৈরি করা
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, newAgent.email, newAgent.password);
+    
+    // ডাটাবেসের 'agents' কালেকশনে তথ্য সেভ করা
+    await setDoc(doc(db, "agents", userCredential.user.uid), {
+      name: newAgent.name,
+      phone: newAgent.phone,
+      email: newAgent.email,
+      role: "agent",
+      status: "active",
+      createdAt: new Date().toISOString()
+    });
+
+    alert("এজেন্ট সফলভাবে অনবোর্ড হয়েছে! ইউজারকে ইমেইল ও পাসওয়ার্ড জানিয়ে দিন।");
+    setNewAgent({ name: "", phone: "", email: "", password: "" });
+  } catch (error) {
+    console.error("Error:", error);
+    alert("এজেন্ট তৈরি করতে সমস্যা হয়েছে।");
+  }
 };
   const navItems = [
     { id: "queue", label: "Active Queue", icon: <Activity className="w-5 h-5"/> },
