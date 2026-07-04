@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { db } from "../firebase/config"; // আপনার সঠিক পাথ চেক করে নিন
+import { db } from "../../firebase/config";// আপনার সঠিক পাথ চেক করে নিন
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export const useFollowupManager = (initialCallList) => {
