@@ -1,17 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { db } from "../firebase/config"; // আপনার সঠিক পাথ চেক করে নিন
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
-// এটি আপনার মেইন অ্যাপ বা ড্যাশবোর্ডে import করবেন
 export const useFollowupManager = (initialCallList) => {
   const [callList, setCallList] = useState(initialCallList || []);
 
-  // ১. কল কমপ্লিট এবং ২ দিন পর অটো-ফলোআপ সেট করা
-  const completeCallAndScheduleNext = (callId, patientId, agentId, note) => {
-    // বর্তমান কলটি কমপ্লিট করা
+  const completeCallAndScheduleNext = async (callId, patientId, agentId, note) => {
+    // ১. স্টেট আপডেট (লোকাল UI এর জন্য)
     const updatedCalls = callList.map(call => 
       call.id === callId ? { ...call, status: 'completed', note: note, completedAt: new Date() } : call
     );
 
-    // ২ দিনের অটো-ফলোআপ ক্যালকুলেশন
+    // ২. Firestore-এ ডাটা পুশ করা (ডাক্তারের ড্যাশবোর্ডের জন্য রিয়েল-টাইম ব্রিজ)
+    try {
+      await addDoc(collection(db, "daily_activities"), {
+        patientId,
+        agentId,
+        note,
+        status: "completed",
+        timestamp: serverTimestamp(),
+        type: "followup_update"
+      });
+    } catch (error) {
+      console.error("Error pushing to Firestore:", error);
+    }
+
+    // ৩. ২ দিনের ফলো-আপ শিডিউল লজিক
     const nextFollowupDate = new Date();
     nextFollowupDate.setDate(nextFollowupDate.getDate() + 2);
 

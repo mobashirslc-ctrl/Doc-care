@@ -23,48 +23,55 @@ export const registerUser = async (formData: any) => {
   return userCredential;
 };
 
-// ২. লগইন ফাংশন (যেখানে সিকিউরিটি চেক করা হয়েছে)
+// ২. লগইন ফাংশন (এজেন্ট ও ইউজারদের জন্য)
 export const loginUser = async (email: string, password: string) => {
-  // ক. ইমেইল ও পাসওয়ার্ড ভ্যালিডেশন (Firebase Auth)
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   
-  // খ. Firestore থেকে ইউজারের ডেটা আনা (রেজিস্ট্রেশন চেক)
-  const userDocRef = doc(db, "users", userCredential.user.uid);
-  const userDoc = await getDoc(userDocRef);
+  let userDocRef = doc(db, "agents", userCredential.user.uid);
+  let userDoc = await getDoc(userDocRef);
+
+  if (!userDoc.exists()) {
+    userDocRef = doc(db, "users", userCredential.user.uid);
+    userDoc = await getDoc(userDocRef);
+  }
   
   if (!userDoc.exists()) {
-    // যদি ডাটাবেসে ইউজার না থাকে, তবে লগইন হতে দেবে না
     await signOut(auth);
-    throw new Error("এই ইউজারটি সিস্টেমে রেজিস্টার্ড নয়।");
+    throw new Error("এই ইউজারটি সিস্টেমে রেজিস্টার্ড নয়।");
   }
 
-  const userData = userDoc.data();
+  const userData = userDoc.data() as any;
+  console.log("Firestore Data:", userData);
 
-  // গ. স্ট্যাটাস চেক (অ্যাপ্রুভাল পেন্ডিং চেক)
   if (userData.status === "pending") {
-    await signOut(auth); // ইউজারকে লগআউট করিয়ে দেওয়া হচ্ছে
-    throw new Error("আপনার অ্যাকাউন্ট এখনো অনুমোদিত হয়নি। অনুগ্রহ করে অ্যাডমিনের অনুমোদনের অপেক্ষা করুন।");
+    await signOut(auth);
+    throw new Error("আপনার অ্যাকাউন্ট এখনো অনুমোদিত হয়নি। অনুগ্রহ করে অ্যাডমিনের অনুমোদনের অপেক্ষা করুন।");
   }
 
-  return { ...userCredential.user, ...userData };
+  // রোল না থাকলে ডিফল্ট "agent" সেট হবে
+  const finalRole = userData.role ? userData.role : "agent";
+
+  return { 
+    ...userCredential.user, 
+    ...userData, 
+    role: finalRole 
+  };
 };
-// ২. অ্যাডমিন লগইন (রেজিস্ট্রেশন ছাড়াই সরাসরি অ্যাক্সেস)
+
+// ৩. অ্যাডমিন লগইন
 export const loginAdmin = async (email: string, password: string) => {
-  // কনফার্ম করুন যে ইমেইলটি আপনার অ্যাডমিন ইমেইল
   const ADMIN_EMAIL = "admintech@gmail.com"; 
 
   if (email !== ADMIN_EMAIL) {
     throw new Error("আপনি অ্যাডমিন নন!");
   }
 
-  // Firebase Auth দিয়ে লগইন
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   
-  // অ্যাডমিন হিসেবে সাকসেসফুল লগইন রিটার্ন
   return { ...userCredential.user, role: "admin" };
 };
 
-// ৩. লগআউট ফাংশন
+// ৪. লগআউট ফাংশন
 export const logoutUser = async () => {
   await signOut(auth);
 };

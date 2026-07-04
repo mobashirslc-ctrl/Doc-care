@@ -1,6 +1,7 @@
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import React, { useState, useEffect } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
-import { db } from "../firebase/config";
+import { collection, addDoc, doc, updateDoc, onSnapshot, query, setDoc } from "firebase/firestore";
+import { auth, db } from "../../firebase/config";
 import { Download, Mail, Shield, LogOut, PhoneCall, ArrowRight, Users, UserCheck, CreditCard, BarChart2, RefreshCw, Activity } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 const PACKAGES: any = {
@@ -41,19 +42,48 @@ const [selectedAgentId, setSelectedAgentId] = useState("");
 const [selectedDoctorId, setSelectedDoctorId] = useState("");
 const [reportMonth, setReportMonth] = useState("জুন ২০২৫");
 const [stats, setStats] = useState({ totalDocs: 0, activeAgents: 0, totalPatients: 0 });
-
+const [agents, setAgents] = useState([]);
+useEffect(() => {
+    const q = query(collection(db, "agents"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const agentsData = snapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data() 
+        }));
+        setAgents(agentsData); // এখানে ডাটা সেট করে দিলেন
+    });
+    return () => unsubscribe();
+}, []);
 // --- সব ফাংশন গুলো এখানে ---
 const handleAddAgent = async () => {
-    if (!newAgent.email || !newAgent.password) {
+    if (!newAgent.email || !newAgent.password || !newAgent.name) {
         alert("সব তথ্য পূরণ করুন!");
         return;
     }
-    console.log("এজেন্ট যুক্ত হচ্ছে:", newAgent);
-    alert("এজেন্ট অনবোর্ড করা হয়েছে!");
-    // ফর্ম খালি করার জন্য:
-    setNewAgent({ name: "", phone: "", email: "", password: "" });
-};
 
+    try {
+        // ১. Firebase Auth-এ ইউজার তৈরি করুন (এটি ছাড়া লগইন কাজ করবে না)
+        const userCredential = await createUserWithEmailAndPassword(auth, newAgent.email, newAgent.password);
+        
+        // ২. Firestore-এ ডাটা সেভ করুন
+        // এখানে addDoc এর বদলে setDoc ব্যবহার করা ভালো যাতে Auth UID এর সাথে ডাটা ম্যাচ করে
+        await setDoc(doc(db, "agents", userCredential.user.uid), {
+            uid: userCredential.user.uid,
+            name: newAgent.name,
+            phone: newAgent.phone,
+            email: newAgent.email,
+            status: "active", // সরাসরি active করে দিন
+            createdAt: new Date().toISOString()
+        });
+
+        alert("এজেন্ট সফলভাবে অনবোর্ড হয়েছে! এখন লগইন করতে পারবে।");
+        setNewAgent({ name: "", phone: "", email: "", password: "" });
+    } catch (e) {
+      console.error("Firebase Full Error:", e);
+        // যদি ইমেইল আগে থেকেই থাকে, ফায়ারবেস এরর দিবে
+        alert("অনবোর্ডিং ব্যর্থ: " + e.message);
+    }
+};
 const handlePatientSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPatient.name || !newPatient.phone) {
@@ -128,25 +158,38 @@ const handlePatientSubmit = (e: React.FormEvent) => {
     </tr>
   </thead>
   <tbody>
-  {patientList.map((p: any) => (
-    <tr key={p.id} className="border-b border-white/5">
-      <td className="p-3 text-white font-bold">{p.name}<br/><span className="font-normal">{p.phone}</span></td>
-      <td className="p-3">{p.doctorName}</td>
-      <td className="p-3">{p.disease}</td>
-      <td className="p-3">
-        {p.followups?.map((f: any, i: number) => (
-          <div key={i} className="text-xs bg-gray-800 p-1 mb-1 rounded">{f.date}: {f.note}</div>
-        ))}
-      </td>
-      <td className="p-3">
-        <select onChange={(e) => onAssignCall(e.target.value, p.id)} className="bg-black p-1 rounded">
-          <option>Agent Assign</option>
-          {agentList.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+    {patientList.map((p: any) => (
+      <tr key={p.id} className="border-b border-white/5">
+        <td className="p-3 text-white font-bold">
+          {p.name}<br />
+          <span className="font-normal">{p.phone}</span>
+        </td>
+        <td className="p-3">{p.doctorName}</td>
+        <td className="p-3">{p.disease}</td>
+        <td className="p-3">
+          {p.followups?.map((f: any, i: number) => (
+            <div key={i} className="text-xs bg-gray-800 p-1 mb-1 rounded">
+              {f.date}: {f.note}
+            </div>
+          ))}
+        </td>
+        <td className="p-3">
+        <select 
+          value={p.assignedAgentId || ""} 
+          onChange={(e) => onAssignCall(e.target.value, p.id)} 
+          className="bg-black p-1 rounded border border-white/10 text-white focus:outline-none text-xs"
+        >
+          <option value="">Agent Assign</option>
+          {agents.map((a: any) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
         </select>
       </td>
-    </tr>
-  ))}
-</tbody>
+      </tr>
+    ))}
+  </tbody>
 </table>
 {tab === "manual-entry" && (
   <div className="rounded-2xl border border-white/10 p-6 bg-[#1E293B]">
@@ -356,15 +399,18 @@ const handlePatientSubmit = (e: React.FormEvent) => {
       <h3 className="font-bold text-white mb-4">এজেন্ট–ডাক্তার অ্যাসাইনমেন্ট</h3>
       <div className="flex items-center gap-4">
         <select 
-          onChange={(e) => setSelectedAgentId(e.target.value)} 
-          className="flex-1 border border-white/20 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none" 
-          style={{ background: "#0f172a" }}
-        >
-          <option value="">এজেন্ট সিলেক্ট করুন</option>
-          {agentList.filter(a => a.status === "approved").map(a => (
-            <option key={a.id} value={a.id} className="bg-gray-900">{a.name}</option>
-          ))}
-        </select>
+  value={selectedAgentId} 
+  onChange={(e) => setSelectedAgentId(e.target.value)} 
+  className="flex-1 border border-white/20 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none" 
+  style={{ background: "#0f172a" }}
+>
+  <option value="">এজেন্ট সিলেক্ট করুন</option>
+  {agentList
+    .filter((a: any) => a.status === "approved")
+    .map((a: any) => (
+      <option key={a.id} value={a.id} className="bg-gray-900">{a.name}</option>
+    ))}
+</select>
 
         <ArrowRight className="w-5 h-5 text-gray-500 flex-shrink-0" />
 

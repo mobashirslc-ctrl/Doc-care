@@ -374,37 +374,25 @@ function LoginPage({ go, setAuth }: { go: (v: View) => void; setAuth: (u: { name
   ];
 
   const handleLogin = async () => {
-  setLoading(true);
-  try {
-    let userData;
-
-    // ১. চেক করা হচ্ছে ইউজার নাকি অ্যাডমিন লগইন করছে
-    if (role === "admin") {
-      // এটি আপনার auth.tsx-এ তৈরি করা নতুন ফাংশন
-      userData = await loginAdmin(identifier, password);
-    } else {
-      // এটি আপনার আগের ইউজার লগইন ফাংশন
-      userData = await loginUser(identifier, password);
+    setLoading(true);
+    try {
+        const userData = await loginUser(identifier, password);
+        
+        // কনসোলে চেক করুন রোল কী আসছে
+        console.log("Data from auth:", userData); 
+        
+        if (userData && userData.role) {
+            setAuth({ name: userData.name, role: userData.role });
+            go(userData.role);
+        } else {
+            alert("ইউজারের রোল পাওয়া যায়নি!");
+        }
+    } catch (error: any) {
+        alert("লগইন ব্যর্থ: " + error.message);
+    } finally {
+        setLoading(false);
     }
-
-    // ২. অ্যাপের অথেন্টিকেশন স্টেট আপডেট
-    // অ্যাডমিন হলে নাম "Admin" হিসেবে সেট হবে
-    setAuth({ 
-      name: userData.name || "Admin", 
-      role: userData.role || "admin" 
-    });
-
-    // ৩. ইউজারের রোল অনুযায়ী সঠিক ড্যাশবোর্ডে রিডাইরেক্ট করুন
-    // যদি role 'admin' হয়, তবে এটি "admin" ভিউতে পাঠাবে
-    go(userData.role); 
-    
-  } catch (error: any) {
-    alert("লগইন ব্যর্থ: " + error.message);
-  } finally {
-    setLoading(false);
-  }
 };
-
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-12" style={{ background: "linear-gradient(135deg, #FF5E13 0%, #D84315 100%)" }}>
       <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md mx-4">
@@ -1706,15 +1694,30 @@ export default function App() {
 const [patientList, setPatientList] = useState<any[]>([]);
   // Firebase Real-time Listener
   useEffect(() => {
-    const unsubAgents = onSnapshot(collection(db, "agents"), (snapshot) => {
-      setAgentList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    const unsubDoctors = onSnapshot(collection(db, "doctors"), (snapshot) => {
-      setDoctorList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => { unsubAgents(); unsubDoctors(); };
-  }, []);
+  // এজেন্ট লিসেনার
+  const unsubAgents = onSnapshot(collection(db, "agents"), (snapshot) => {
+    setAgentList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+  });
 
+  // ডক্টর লিসেনার
+  const unsubDoctors = onSnapshot(collection(db, "doctors"), (snapshot) => {
+    setDoctorList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+  });
+
+  // নতুন: ডেইলি অ্যাক্টিভিটি লিসেনার (ডাক্তারের জন্য রিয়েল-টাইম আপডেট)
+  const unsubActivities = onSnapshot(collection(db, "daily_activities"), (snapshot) => {
+    const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // এখানে আপনার স্টেট আপডেট করুন, যেমন: setDailyActivities(activities);
+    console.log("ডাক্তার রিসিভ করেছে:", activities);
+  });
+
+  // ক্লিনআপ ফাংশন: ৩টি লিসেনারই বন্ধ হবে যখন কম্পোনেন্ট আনমাউন্ট হবে
+  return () => { 
+    unsubAgents(); 
+    unsubDoctors(); 
+    unsubActivities(); 
+  };
+}, []);
   // AdminDashboard এর জন্য প্রয়োজনীয় ফাংশন
   const handleUpdateAgent = async (id: string, status: string) => {
     await updateDoc(doc(db, "agents", id), { status });
@@ -1728,12 +1731,28 @@ const [patientList, setPatientList] = useState<any[]>([]);
     }
   };
 
-  const handleAssignCall = async (agentId: string, doctorId: string) => {
-    await addDoc(collection(db, "call_assignments"), {
-      agentId, doctorId, timestamp: serverTimestamp()
+  const handleAssignCall = async (agentId: string, patientId: string) => {
+  try {
+    // ১. রোগীর ডকুমেন্টে এজেন্ট আইডি এবং স্ট্যাটাস আপডেট করা
+    const patientRef = doc(db, "patients", patientId);
+    await updateDoc(patientRef, {
+      assignedAgentId: agentId,
+      status: "assigned"
     });
-    alert("কল সফলভাবে অ্যাসাইন হয়েছে!");
-  };
+
+    // ২. চাইলে আপনি রেকর্ড রাখার জন্য আপনার আগের কালেকশনটিও রাখতে পারেন
+    await addDoc(collection(db, "call_assignments"), {
+      agentId,
+      patientId,
+      timestamp: serverTimestamp()
+    });
+
+    alert("এজেন্ট সফলভাবে অ্যাসাইন করা হয়েছে!");
+  } catch (error) {
+    console.error("অ্যাসাইনমেন্ট এরর:", error);
+    alert("অ্যাসাইন করতে সমস্যা হয়েছে!");
+  }
+};
   const handleAddPatient = async (newPatient: any) => {
   try {
     // ১. অ্যাডমিন টেবিলের সাথে মিল রেখে ডাটা সাজানো
@@ -1761,7 +1780,10 @@ const [patientList, setPatientList] = useState<any[]>([]);
     alert("রোগী যোগ করতে সমস্যা হয়েছে, দয়া করে আবার চেষ্টা করুন।");
   }
 };
-  const go = (v: View) => setView(v);
+ const go = (role: string) => {
+    console.log("Setting view to:", role);
+    setView(role as View);
+};
   const setAuth = (u: { name: string; role: Role } | null) => setAuthUser(u);
 
   const renderView = () => {
@@ -1824,6 +1846,7 @@ const [patientList, setPatientList] = useState<any[]>([]);
           onAssignCall={handleAssignCall}
           onAddPatient={handleAddPatient} 
           patientList={patientList}      
+          onAssignCall={handleAssignCall}
         />
       ); // <--- এখানে এই ) এবং ; টি অবশ্যই থাকতে হবে
     case "qrscan": 

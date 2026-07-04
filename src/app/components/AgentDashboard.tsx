@@ -1,5 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react"; // useEffect যোগ করা হয়েছে
 import { useFollowupManager } from './FollowupManager';
+import { 
+  collection, query, where, onSnapshot // এগুলো নতুন যোগ করা হয়েছে
+} from "firebase/firestore"; 
+import { db, auth } from "../../firebase/config"; // আপনার ফাইল পাথ চেক করে নিন (../firebase/config অথবা ./firebase/config)
+
 import { 
   Activity, Users, ClipboardList, BarChart2, FileText, UserPlus,
   Headphones, LogOut, Menu, Search, Calendar, PhoneOff, PhoneCall, 
@@ -34,6 +39,7 @@ function AgentDashboard({
   onCompleteCall?: (callId: string, note: string, nextFollowupDate?: string) => void;
 }) {
   // হুকটি এখানে ফাংশনের বডির ভেতরে নিয়ে এসেছি
+  
   const { completeCallAndScheduleNext, callList: updatedCallList } = useFollowupManager(callList);
   const [tab, setTab] = useState("queue"); 
   const [selectedItem, setSelectedItem] = useState<any>(null); 
@@ -42,7 +48,25 @@ function AgentDashboard({
   const [note, setNote] = useState(""); 
   const [sidebarOpen, setSidebarOpen] = useState(true); 
   const [reportMonth, setReportMonth] = useState("জুন ২০২৫");
+  useEffect(() => {
+    if (!auth.currentUser) return;
 
+    const q = query(
+      collection(db, "patients"),
+      where("assignedAgentId", "==", auth.currentUser.uid), // লগইন করা এজেন্টের আইডি
+      where("status", "==", "assigned") // শুধু এসাইন করা কলগুলো
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setMyCalls(data);
+    });
+
+    return () => unsubscribe();
+  }, [auth.currentUser]);
+
+ 
+  
   // নতুন রোগীর স্টেটস
   const [newPatient, setNewPatient] = useState({ name: "", age: "", phone: "", address: "", doctor: "", prescription: "" });
   const [newAgent, setNewAgent] = useState({ name: "", phone: "", email: "", password: "" });
@@ -52,24 +76,41 @@ function AgentDashboard({
   const agentId = currentUser?.id || "rafi_hasan";
 
   // ডাইনামিক কিউ বা কল লিস্ট ফিল্টারিং
-  const dynamicQueue = (updatedCallList || [])
-  .filter((c: any) => c.agentId === agentId && c.status === "pending")
-  .map((c: any) => {
-    const p = (patients || []).find((pat: any) => pat.id === c.patientId);
-    return {
-      id: c.id,
-      patient: p?.name || "অজানা রোগী",
-      phone: p?.phone || "N/A",
-      type: c.type || "call",
-      urgent: c.urgent || false,
-      time: c.scheduledDate || "আজকে",
-      // এখানে পরিবর্তন হবে: doctor এর বদলে doctorName এবং prescription এর বদলে disease
-      doctor: p?.doctorName || p?.doctor || "অনির্ধারিত", 
-      disease: p?.disease || "N/A", 
-      patientId: c.patientId
-    };
+  // ১. Firebase থেকে রিয়েল-টাইম ডেটা পাওয়ার জন্য স্টেট (যদি আগে না থাকে)
+// ১. Firebase থেকে রিয়েল-টাইম ডেটা পাওয়ার জন্য স্টেট
+// ১. Firebase স্টেট
+const [myCalls, setMyCalls] = useState<any[]>([]);
+
+// ২. ইফেক্ট (আগের মতোই থাকবে)
+useEffect(() => {
+  if (!auth?.currentUser) return;
+  const q = query(collection(db, "patients"), where("assignedAgentId", "==", auth.currentUser.uid), where("status", "==", "assigned"));
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    setMyCalls(data);
   });
-  const displayQueue = dynamicQueue.length > 0 ? dynamicQueue : (typeof QUEUE !== "undefined" ? QUEUE : []);
+  return () => unsubscribe();
+}, [auth?.currentUser]);
+
+
+// নাম পরিবর্তন করে 'finalQueue' দিয়ে চেষ্টা করুন
+const finalQueue = useMemo(() => {
+  if (!myCalls || myCalls.length === 0) return [];
+  
+  return myCalls.map((c: any) => ({
+    id: c.id,
+    patient: c.name || "অজানা রোগী",
+    phone: c.phone || "N/A",
+    type: c.type || "call",
+    urgent: c.urgent || false,
+    time: "আজকে",
+    doctor: c.doctorName || c.doctor || "অনির্ধারিত",
+    disease: c.disease || "N/A",
+    patientId: c.id
+  }));
+}, [myCalls]);
+
+// তবে সেটিকেও 'finalQueue' তে পরিবর্তন করে দিন।
   const displayPatients = (patients && patients.length > 0) ? patients : (typeof PATIENTS !== "undefined" ? PATIENTS : []);
   const displayPerfData = typeof PERF_DATA !== "undefined" ? PERF_DATA : DEFAULT_PERF;
   const displayCallPie = typeof CALL_PIE !== "undefined" ? CALL_PIE : DEFAULT_PIE;
@@ -233,7 +274,7 @@ const handleAddAgent = async () => {
           </div>
           <div className="flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-full text-xs font-semibold border border-orange-100">
             <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"/>
-            {displayQueue.length} নতুন পেন্ডিং
+            {finalQueue.length} নতুন পেন্ডিং
           </div>
         </div>
 
@@ -247,10 +288,10 @@ const handleAddAgent = async () => {
               <div className="w-80 flex-shrink-0 border-r border-gray-100 bg-white overflow-y-auto">
                 <div className="p-4 border-b border-gray-100">
                   <div className="text-sm font-semibold text-gray-700">ইনকামিং ও ফলো-আপ কুয়েরি</div>
-                  <div className="text-xs text-gray-400 mt-0.5">{displayQueue.length}টি পেন্ডিং কল রয়েছে</div>
+                  <div className="text-xs text-gray-400 mt-0.5">{finalQueue.length}টি পেন্ডিং কল রয়েছে</div>
                 </div>
                 <div className="divide-y divide-gray-50">
-                  {displayQueue.map((q: any) => (
+                  {finalQueue.map((q: any) => (
                     <button 
                       key={q.id} 
                       onClick={() => setSelectedItem(q)} 
